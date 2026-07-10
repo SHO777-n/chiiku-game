@@ -404,9 +404,18 @@ $("homeBtn").onclick = ()=>{ sfx.tap(); goMenu(); };
 /* ============================================================
    GAME 1: かぞえてレスキュー (counting)
    ============================================================ */
+// 助数詞テーブル(音便変化込みの読み)
+const COUNTERS = {
+  hiki: { q:"なんびき", read:["","いっぴき","にひき","さんびき","よんひき","ごひき","ろっぴき","ななひき","はっぴき","きゅうひき","じゅっぴき","じゅういっぴき","じゅうにひき"] },
+  wa:   { q:"なんわ",   read:["","いちわ","にわ","さんわ","よんわ","ごわ","ろくわ","ななわ","はちわ","きゅうわ","じゅうわ","じゅういちわ","じゅうにわ"] },
+  ko:   { q:"なんこ",   read:["","いっこ","にこ","さんこ","よんこ","ごこ","ろっこ","ななこ","はっこ","きゅうこ","じゅっこ","じゅういっこ","じゅうにこ"] },
+  hon:  { q:"なんぼん", read:["","いっぽん","にほん","さんぼん","よんほん","ごほん","ろっぽん","ななほん","はっぽん","きゅうほん","じゅっぽん","じゅういっぽん","じゅうにほん"] },
+  dai:  { q:"なんだい", read:["","いちだい","にだい","さんだい","よんだい","ごだい","ろくだい","ななだい","はちだい","きゅうだい","じゅうだい","じゅういちだい","じゅうにだい"] },
+};
+// [emoji, 名前, 助数詞キー, 動詞(いる/ある)]
 const COUNT_ANIMALS = [
-  ["🐶","わんちゃん"],["🐱","ねこちゃん"],["🐤","ひよこ"],["🐰","うさぎ"],
-  ["🐢","かめ"],["🐷","ぶた"],["💩","うんち"],["🦴","ほね"],["🚒","しょうぼうしゃ"],
+  ["🐶","わんちゃん","hiki","いる"],["🐱","ねこちゃん","hiki","いる"],["🐤","ひよこ","wa","いる"],["🐰","うさぎ","hiki","いる"],
+  ["🐢","かめ","hiki","いる"],["🐷","ぶた","hiki","いる"],["💩","うんち","ko","ある"],["🦴","ほね","hon","ある"],["🚒","しょうぼうしゃ","dai","ある"],
 ];
 let cnt = null;
 function startCount(){
@@ -420,10 +429,11 @@ function nextCount(){
   dots($("countDots"), ROUNDS, cnt.round);
   const max = countMax();
   const n = 1 + rnd(max);
-  const [emoji, name] = pick(COUNT_ANIMALS);
-  cnt.answer = n;
-  $("countPrompt").innerHTML = `${emoji} ${name}は なんこ(なんびき)?<span class="speakIc">🔊</span>`;
-  $("countPrompt").onclick = ()=>speak(`${name}は、なんびき いるかな?かぞえてみよう!`);
+  const [emoji, name, ckey, verb] = pick(COUNT_ANIMALS);
+  const c = COUNTERS[ckey];
+  cnt.answer = n; cnt.counter = c;
+  $("countPrompt").innerHTML = `${emoji} ${name}は ${c.q}?<span class="speakIc">🔊</span>`;
+  $("countPrompt").onclick = ()=>speak(`${name}は、${c.q} ${verb}かな?かぞえてみよう!`);
   const field = $("countField");
   field.innerHTML = "";
   for(let i=0;i<n;i++){
@@ -446,7 +456,7 @@ function nextCount(){
     b.onclick = ()=>answerCount(b, v);
     ans.append(b);
   });
-  speak(`${name}は、なんびき いるかな?`);
+  speak(`${name}は、${c.q} ${verb}かな?`);
 }
 function answerCount(btn, v){
   if (busy) return;
@@ -454,7 +464,7 @@ function answerCount(btn, v){
     busy = true;
     btn.classList.add("correct"); sfx.good();
     cnt.correct++; cnt.round++;
-    speak(pick(PRAISES) + ` ${v}だね!`);
+    speak(pick(PRAISES) + ` ${cnt.counter.read[v]}だね!`);
     cheer(true);
     setTimeout(()=> cnt.round >= ROUNDS ? stageClear("count", cnt.correct) : nextCount(), 1400);
   } else {
@@ -521,7 +531,7 @@ function flushPoop(b){
     pp.round++;
     setTimeout(()=>{
       cheer(true); sfx.good();
-      speak(`ぜんぶで ${NUM_JA[pp.total]}こ!トイレ ピッカピカ!`);
+      speak(`ぜんぶで ${COUNTERS.ko.read[pp.total]}!トイレ ピッカピカ!`);
       setTimeout(()=> pp.round >= ROUNDS ? stageClear("poop", pp.round) : nextPoop(), 1900);
     }, 800);
   }
@@ -541,7 +551,7 @@ const HIRA = [
   ["ま","ま","まる","⭕"],["み","み","みかん","🍊"],["む","む","むし","🐛"],["め","め","めがね","👓"],["も","も","もも","🍑"],
   ["や","や","やま","⛰️"],["ゆ","ゆ","ゆき","⛄"],["よ","よ","よる","🌃"],
   ["ら","ら","らいおん","🦁"],["り","り","りんご","🍎"],["る","る","るびー","💎"],["れ","れ","れもん","🍋"],["ろ","ろ","ろけっと","🚀"],
-  ["わ","わ","わに","🐊"],["を","を","を","🎯"],["ん","ん","ぱん","🍞"],
+  ["わ","わ","わに","🐊"],
 ];
 let hr = null;
 function startHira(){
@@ -562,8 +572,8 @@ function nextHira(){
   hr.target = target;
   const others = shuffle(pool.filter(h=>h[0]!==target[0])).slice(0, hiraChoices()-1);
   const opts = shuffle([target, ...others]);
-  $("hiraPrompt").innerHTML = `${target[3]} 「<span style="color:#d81b60">${target[0]}</span>」は どれかな?<span class="speakIc">🔊</span>`;
-  $("hiraPrompt").onclick = ()=>speak(`${target[2]}の、「${target[1]}」は どれかな?`);
+  $("hiraPrompt").innerHTML = `<span style="font-size:1.7em">${target[3]}</span> の さいしょの もじは?<span class="speakIc">🔊</span>`;
+  $("hiraPrompt").onclick = ()=>speak(`「${target[2]}」!${target[2]}の、さいしょの もじは どれかな?`);
   const ans = $("hiraAnswers");
   ans.style.gridTemplateColumns = `repeat(${opts.length<=3?opts.length:Math.ceil(opts.length/2)},1fr)`;
   ans.innerHTML = "";
@@ -577,7 +587,7 @@ function nextHira(){
     b.onclick = ()=>answerHira(b, h);
     ans.append(b);
   });
-  speak(`${target[2]}の、「${target[1]}」は どれかな?`);
+  speak(`「${target[2]}」!${target[2]}の、さいしょの もじは どれかな?`);
 }
 function answerHira(btn, h){
   if (busy) return;
@@ -585,12 +595,12 @@ function answerHira(btn, h){
     busy = true;
     btn.classList.add("correct"); sfx.good();
     hr.correct++; hr.round++;
-    speak(`${pick(PRAISES)} 「${hr.target[1]}」!${hr.target[2]}の「${hr.target[1]}」だね!`);
+    speak(`${pick(PRAISES)} ${hr.target[2]}の さいしょの もじは「${hr.target[1]}」だね!`);
     cheer(true);
     setTimeout(()=> hr.round >= ROUNDS ? stageClear("hira", hr.correct) : nextHira(), 1700);
   } else {
     btn.classList.add("wrong"); sfx.bad();
-    speak(`それは「${h[1]}」だね。「${hr.target[1]}」は どれかな?`);
+    speak(`それは「${h[1]}」だね。「${hr.target[2]}」の さいしょの もじは どれかな?`);
   }
 }
 
