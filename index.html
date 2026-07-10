@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>わんわんレスキュー知育ランド</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:manipulation; user-select:none; -webkit-user-select:none; }
+  html,body { height:100%; overflow:hidden; }
+  body {
+    font-family:'Hiragino Maru Gothic ProN','BIZ UDGothic','Yu Gothic',sans-serif;
+    background:linear-gradient(180deg,#7ec8ff 0%,#b3e5ff 55%,#a8e6a1 55.5%,#7fd67a 100%);
+    display:flex; flex-direction:column;
+  }
+  #app { flex:1; display:flex; flex-direction:column; max-width:640px; width:100%; margin:0 auto; padding:8px; position:relative; }
+
+  /* ===== header ===== */
+  #topbar { display:flex; align-items:center; justify-content:space-between; padding:6px 4px; min-height:52px; }
+  #homeBtn {
+    font-size:26px; background:#fff; border:3px solid #ff9800; border-radius:16px;
+    width:56px; height:48px; cursor:pointer; box-shadow:0 4px 0 #e08900;
+  }
+  #homeBtn:active { transform:translateY(3px); box-shadow:0 1px 0 #e08900; }
+  #starBox {
+    background:#fff; border:3px solid #ffc107; border-radius:20px; padding:4px 14px;
+    font-size:22px; font-weight:bold; color:#e65100; box-shadow:0 3px 0 #d8a300;
+    display:flex; align-items:center; gap:6px;
+  }
+  #starBox.pop { animation:starPop .4s; }
+  @keyframes starPop { 40% { transform:scale(1.35); } }
+
+  /* ===== screens ===== */
+  .screen { flex:1; display:none; flex-direction:column; }
+  .screen.active { display:flex; }
+
+  /* ===== menu ===== */
+  #title {
+    text-align:center; font-size:clamp(22px,6vw,34px); font-weight:bold; color:#fff;
+    text-shadow:2px 3px 0 #1a76c9, -1px -1px 0 #1a76c9, 1px -1px 0 #1a76c9, -1px 1px 0 #1a76c9;
+    padding:4px 0 10px;
+  }
+  #menuGrid { display:grid; grid-template-columns:1fr 1fr; gap:12px; flex:1; align-content:start; padding-bottom:8px; }
+  .menuCard {
+    border:none; border-radius:22px; padding:14px 6px 12px; cursor:pointer; text-align:center;
+    box-shadow:0 6px 0 rgba(0,0,0,.22); color:#fff; font-family:inherit;
+    display:flex; flex-direction:column; align-items:center; gap:4px; min-height:118px; justify-content:center;
+  }
+  .menuCard:active { transform:translateY(4px); box-shadow:0 2px 0 rgba(0,0,0,.22); }
+  .menuCard .em { font-size:clamp(38px,11vw,54px); line-height:1.1; filter:drop-shadow(0 2px 2px rgba(0,0,0,.25)); }
+  .menuCard .nm { font-size:clamp(15px,4.2vw,20px); font-weight:bold; text-shadow:1px 2px 0 rgba(0,0,0,.3); }
+  .menuCard .lv { font-size:12px; background:rgba(255,255,255,.3); border-radius:10px; padding:1px 10px; }
+  #mascotRow { display:flex; justify-content:center; align-items:flex-end; gap:6px; font-size:clamp(30px,9vw,44px); padding:2px 0 6px; }
+  #mascotRow span { display:inline-block; animation:bounce 1.6s infinite; }
+  #mascotRow span:nth-child(2){ animation-delay:.15s } #mascotRow span:nth-child(3){ animation-delay:.3s }
+  #mascotRow span:nth-child(4){ animation-delay:.45s } #mascotRow span:nth-child(5){ animation-delay:.6s }
+  @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+
+  /* ===== common game layout ===== */
+  .prompt {
+    background:#fff; border-radius:20px; border:4px solid #4fc3f7; padding:10px 14px; margin-bottom:10px;
+    font-size:clamp(19px,5.5vw,27px); font-weight:bold; color:#01579b; text-align:center; position:relative;
+    min-height:64px; display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap;
+    cursor:pointer;
+  }
+  .prompt .speakIc { position:absolute; right:8px; bottom:4px; font-size:16px; opacity:.55; }
+  .stage { flex:1; display:flex; flex-direction:column; justify-content:center; gap:12px; }
+  .answers { display:grid; gap:12px; }
+  .ansBtn {
+    border:none; border-radius:20px; cursor:pointer; font-family:inherit; font-weight:bold; color:#fff;
+    box-shadow:0 6px 0 rgba(0,0,0,.25); padding:10px; transition:transform .08s;
+  }
+  .ansBtn:active { transform:translateY(4px); box-shadow:0 2px 0 rgba(0,0,0,.25); }
+  .ansBtn.correct { animation:correctFlash .5s 2; }
+  .ansBtn.wrong { animation:shake .4s; opacity:.55; }
+  @keyframes correctFlash { 50% { filter:brightness(1.5); transform:scale(1.08); } }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+
+  .progressDots { display:flex; justify-content:center; gap:8px; padding:8px 0 2px; font-size:20px; }
+
+  /* ===== counting field ===== */
+  #countField {
+    background:rgba(255,255,255,.75); border-radius:20px; border:4px dashed #81c784;
+    min-height:150px; display:flex; flex-wrap:wrap; justify-content:center; align-content:center;
+    gap:6px; padding:12px; font-size:clamp(34px,10vw,52px);
+  }
+  #countField span { animation:popIn .4s backwards; }
+  @keyframes popIn { from { transform:scale(0); } to { transform:scale(1); } }
+
+  /* ===== poop game ===== */
+  #poopStage { flex:1; position:relative; background:rgba(255,255,255,.4); border-radius:20px; overflow:hidden; min-height:300px; }
+  #toilet { position:absolute; bottom:6px; left:50%; transform:translateX(-50%); font-size:clamp(56px,16vw,84px); z-index:2; transition:transform .15s; }
+  #toilet.gulp { transform:translateX(-50%) scale(1.25) rotate(-6deg); }
+  .poop {
+    position:absolute; font-size:clamp(40px,12vw,60px); cursor:pointer; z-index:3;
+    animation:wiggle 1.2s infinite; border:none; background:none; padding:6px; font-family:inherit;
+  }
+  @keyframes wiggle { 0%,100%{transform:rotate(-10deg) scale(1)} 50%{transform:rotate(10deg) scale(1.1)} }
+  .poop.fly { animation:none; transition:all .55s cubic-bezier(.4,-0.2,.7,1); pointer-events:none; }
+  #poopCounter { position:absolute; top:8px; right:12px; font-size:30px; font-weight:bold; color:#6d4c41; z-index:4;
+    background:rgba(255,255,255,.85); border-radius:14px; padding:2px 14px; border:3px solid #a1887f; }
+
+  /* ===== memory ===== */
+  #memGrid { display:grid; gap:10px; flex:1; align-content:center; }
+  .memCard { position:relative; aspect-ratio:3/4; cursor:pointer; perspective:600px; border:none; background:none; padding:0; }
+  .memInner { position:absolute; inset:0; transition:transform .4s; transform-style:preserve-3d; }
+  .memCard.flip .memInner { transform:rotateY(180deg); }
+  .memFace { position:absolute; inset:0; border-radius:14px; display:flex; align-items:center; justify-content:center;
+    backface-visibility:hidden; -webkit-backface-visibility:hidden; font-size:clamp(28px,9vw,46px); }
+  .memBack { background:linear-gradient(135deg,#42a5f5,#1e88e5); border:3px solid #fff; box-shadow:0 4px 0 rgba(0,0,0,.25); }
+  .memBack::after { content:"🐾"; font-size:clamp(24px,7vw,38px); }
+  .memFront { background:#fff; border:3px solid #ffb300; transform:rotateY(180deg); }
+  .memCard.done { animation:matchPulse .6s; }
+  .memCard.done .memFront { background:#fff9c4; border-color:#f57f17; }
+  @keyframes matchPulse { 50% { transform:scale(1.15) rotate(5deg); } }
+
+  /* ===== stickers ===== */
+  #stickerHead { text-align:center; font-size:clamp(20px,6vw,28px); font-weight:bold; color:#fff;
+    text-shadow:2px 2px 0 #c2185b; padding:6px 0 12px; }
+  #stickerGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; align-content:start; overflow-y:auto; flex:1; padding-bottom:10px; }
+  .stk { aspect-ratio:1; background:rgba(255,255,255,.9); border-radius:18px; display:flex; align-items:center; justify-content:center;
+    font-size:clamp(30px,9vw,44px); border:3px solid #f8bbd0; position:relative; }
+  .stk.locked { filter:grayscale(1); opacity:.4; }
+  .stk.locked::after { content:"?"; position:absolute; font-size:24px; font-weight:bold; color:#880e4f;
+    background:rgba(255,255,255,.85); border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; }
+  .stk.fresh { animation:matchPulse .8s 2; border-color:#ff4081; }
+  #stickerNote { text-align:center; color:#fff; font-weight:bold; font-size:15px; text-shadow:1px 1px 0 rgba(0,0,0,.4); padding:6px; }
+
+  /* ===== celebration overlay ===== */
+  #cheer { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column;
+    background:rgba(255,255,255,.45); z-index:50; pointer-events:none; }
+  #cheer.show { display:flex; }
+  #cheerFace { font-size:clamp(80px,26vw,150px); animation:cheerJump .6s infinite alternate; }
+  #cheerText { font-size:clamp(30px,9vw,48px); font-weight:bold; color:#e91e63;
+    text-shadow:2px 3px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 3px 0 #fff; }
+  @keyframes cheerJump { from{transform:translateY(0) rotate(-4deg)} to{transform:translateY(-24px) rotate(4deg)} }
+  .confetti { position:fixed; top:-30px; font-size:24px; z-index:49; pointer-events:none; animation:fall linear forwards; }
+  @keyframes fall { to { transform:translateY(110vh) rotate(720deg); } }
+
+  /* clear screen */
+  #clearBox { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; }
+  #clearBox .big { font-size:clamp(70px,22vw,120px); animation:bounce 1.2s infinite; }
+  #clearBox .msg { font-size:clamp(24px,7vw,36px); font-weight:bold; color:#fff; text-shadow:2px 3px 0 #e65100; text-align:center; }
+  .bigBtn { font-family:inherit; font-size:clamp(20px,6vw,26px); font-weight:bold; color:#fff; border:none; border-radius:24px;
+    padding:16px 34px; cursor:pointer; box-shadow:0 6px 0 rgba(0,0,0,.25); }
+  .bigBtn:active { transform:translateY(4px); box-shadow:0 2px 0 rgba(0,0,0,.25); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <button id="homeBtn" aria-label="ホームへ">🏠</button>
+    <div id="starBox">⭐ <span id="starCount">0</span></div>
+  </div>
+
+  <!-- ===== menu ===== -->
+  <div class="screen active" id="scr-menu">
+    <div id="title">🐶 わんわんレスキュー<br>ちいくランド 🚒</div>
+    <div id="mascotRow"><span>🐕‍🦺</span><span>🐩</span><span>🤖</span><span>🐈</span><span>💩</span></div>
+    <div id="menuGrid">
+      <button class="menuCard" style="background:linear-gradient(135deg,#ff7043,#f4511e)" data-game="count">
+        <span class="em">🐶🔢</span><span class="nm">かぞえてレスキュー</span><span class="lv" id="lv-count">レベル1</span>
+      </button>
+      <button class="menuCard" style="background:linear-gradient(135deg,#8d6e63,#6d4c41)" data-game="poop">
+        <span class="em">💩🚽</span><span class="nm">うんちポイポイ</span><span class="lv" id="lv-poop">レベル1</span>
+      </button>
+      <button class="menuCard" style="background:linear-gradient(135deg,#ab47bc,#8e24aa)" data-game="hira">
+        <span class="em">🤖あ</span><span class="nm">ひらがなタッチ</span><span class="lv" id="lv-hira">レベル1</span>
+      </button>
+      <button class="menuCard" style="background:linear-gradient(135deg,#26a69a,#00897b)" data-game="shape">
+        <span class="em">🔴🔺</span><span class="nm">いろ・かたち</span><span class="lv" id="lv-shape">レベル1</span>
+      </button>
+      <button class="menuCard" style="background:linear-gradient(135deg,#42a5f5,#1e88e5)" data-game="memory">
+        <span class="em">🃏🧠</span><span class="nm">ペアさがし</span><span class="lv" id="lv-memory">レベル1</span>
+      </button>
+      <button class="menuCard" style="background:linear-gradient(135deg,#ec407a,#d81b60)" data-game="sticker">
+        <span class="em">📖✨</span><span class="nm">シールちょう</span><span class="lv" id="lv-sticker">あつめよう</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== counting ===== -->
+  <div class="screen" id="scr-count">
+    <div class="prompt" id="countPrompt"><span class="speakIc">🔊</span></div>
+    <div class="stage">
+      <div id="countField"></div>
+      <div class="answers" id="countAnswers" style="grid-template-columns:repeat(3,1fr)"></div>
+    </div>
+    <div class="progressDots" id="countDots"></div>
+  </div>
+
+  <!-- ===== poop ===== -->
+  <div class="screen" id="scr-poop">
+    <div class="prompt" id="poopPrompt"><span class="speakIc">🔊</span></div>
+    <div id="poopStage">
+      <div id="poopCounter">💩 0</div>
+      <div id="toilet">🚽</div>
+    </div>
+    <div class="progressDots" id="poopDots"></div>
+  </div>
+
+  <!-- ===== hiragana ===== -->
+  <div class="screen" id="scr-hira">
+    <div class="prompt" id="hiraPrompt"><span class="speakIc">🔊</span></div>
+    <div class="stage">
+      <div class="answers" id="hiraAnswers"></div>
+    </div>
+    <div class="progressDots" id="hiraDots"></div>
+  </div>
+
+  <!-- ===== shapes ===== -->
+  <div class="screen" id="scr-shape">
+    <div class="prompt" id="shapePrompt"><span class="speakIc">🔊</span></div>
+    <div class="stage">
+      <div class="answers" id="shapeAnswers"></div>
+    </div>
+    <div class="progressDots" id="shapeDots"></div>
+  </div>
+
+  <!-- ===== memory ===== -->
+  <div class="screen" id="scr-memory">
+    <div class="prompt" id="memPrompt"><span class="speakIc">🔊</span></div>
+    <div id="memGrid"></div>
+  </div>
+
+  <!-- ===== stickers ===== -->
+  <div class="screen" id="scr-sticker">
+    <div id="stickerHead">✨ シールちょう ✨</div>
+    <div id="stickerGrid"></div>
+    <div id="stickerNote">⭐を10こあつめると あたらしいシールがもらえるよ!</div>
+  </div>
+
+  <!-- ===== stage clear ===== -->
+  <div class="screen" id="scr-clear">
+    <div id="clearBox">
+      <div class="big" id="clearEmoji">🎉</div>
+      <div class="msg" id="clearMsg">ミッション クリア!</div>
+      <button class="bigBtn" style="background:linear-gradient(135deg,#66bb6a,#43a047)" id="againBtn">もういっかい!</button>
+      <button class="bigBtn" style="background:linear-gradient(135deg,#42a5f5,#1e88e5)" id="toMenuBtn">メニューへ</button>
+    </div>
+  </div>
+</div>
+
+<div id="cheer"><div id="cheerFace">🐶</div><div id="cheerText">すごい!</div></div>
+
+<script>
+"use strict";
+/* ============================================================
+   わんわんレスキュー知育ランド
+   4歳向け:数・ひらがな・色形・記憶。全問音声読み上げ対応。
+   ============================================================ */
+
+// ---------- persistent state ----------
+const SAVE_KEY = "wanwan-chiiku-v1";
+const state = Object.assign({
+  stars: 0,
+  stickers: 0,          // unlocked sticker count
+  lv: { count:1, poop:1, hira:1, shape:1, memory:1 },
+  streak: { count:0, poop:0, hira:0, shape:0, memory:0 },
+}, JSON.parse(localStorage.getItem(SAVE_KEY) || "{}"));
+function save(){ localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }
+
+// ---------- audio: speech ----------
+let jaVoice = null;
+function pickVoice(){
+  const vs = speechSynthesis.getVoices().filter(v=>v.lang.startsWith("ja"));
+  jaVoice = vs.find(v=>/Kyoko|Google|O-?Ren|Hattori/i.test(v.name)) || vs[0] || null;
+}
+if ("speechSynthesis" in window){
+  pickVoice();
+  speechSynthesis.onvoiceschanged = pickVoice;
+}
+function speak(text, rate=0.95){
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "ja-JP";
+  if (jaVoice) u.voice = jaVoice;
+  u.rate = rate; u.pitch = 1.25;
+  speechSynthesis.speak(u);
+}
+
+// ---------- audio: sound effects (WebAudio, no assets) ----------
+let actx = null;
+function ac(){ if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==="suspended") actx.resume(); return actx; }
+function tone(freq, dur, type="sine", when=0, vol=0.25){
+  const c = ac(), o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, c.currentTime+when);
+  g.gain.exponentialRampToValueAtTime(0.001, c.currentTime+when+dur);
+  o.connect(g).connect(c.destination);
+  o.start(c.currentTime+when); o.stop(c.currentTime+when+dur+0.05);
+}
+const sfx = {
+  tap(){ tone(600,.08,"square",0,.12); },
+  good(){ [523,659,784,1047].forEach((f,i)=>tone(f,.18,"triangle",i*.09,.3)); },
+  bad(){ tone(220,.25,"sawtooth",0,.15); tone(180,.3,"sawtooth",.12,.15); },
+  fanfare(){ [523,523,523,659,784,784,1047].forEach((f,i)=>tone(f,.22,"triangle",i*.13,.3)); },
+  flush(){ // descending gurgle for the toilet
+    for(let i=0;i<10;i++) tone(400-i*30+Math.random()*40,.1,"sawtooth",i*.05,.08);
+  },
+  flip(){ tone(880,.07,"sine",0,.15); },
+  pop(){ tone(300,.05,"square",0,.2); tone(700,.08,"sine",.04,.2); },
+};
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const shuffle = a => { a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+const rnd = n => Math.floor(Math.random()*n);
+const pick = a => a[rnd(a.length)];
+
+let busy = false;                 // input lock during feedback
+const ROUNDS = 5;                 // questions per session
+
+function show(id){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  $(id).classList.add("active");
+}
+function renderStars(){
+  $("starCount").textContent = state.stars;
+  $("starBox").classList.remove("pop"); void $("starBox").offsetWidth; $("starBox").classList.add("pop");
+}
+function renderLevels(){
+  for (const g of ["count","poop","hira","shape","memory"])
+    $("lv-"+g).textContent = "レベル" + state.lv[g];
+}
+function dots(el, total, done){
+  el.innerHTML = "";
+  for(let i=0;i<total;i++) el.append(Object.assign(document.createElement("span"),{textContent: i<done ? "⭐" : "⚪"}));
+}
+
+// praise + cheering overlay
+const PRAISES = ["すごい!","やったね!","てんさい!","かんぺき!","ナイスレスキュー!","さすが!"];
+const FACES = ["🐶","🐕‍🦺","🐩","🤖","🦴","🎖️"];
+function cheer(short){
+  const c = $("cheer");
+  $("cheerFace").textContent = pick(FACES);
+  const p = pick(PRAISES);
+  $("cheerText").textContent = p;
+  c.classList.add("show");
+  confetti(short?12:22);
+  setTimeout(()=>c.classList.remove("show"), short?900:1500);
+  return p;
+}
+function confetti(n){
+  const items = ["🎉","⭐","🌈","🦴","💖","✨","🍖"];
+  for(let i=0;i<n;i++){
+    const s = document.createElement("div");
+    s.className = "confetti"; s.textContent = pick(items);
+    s.style.left = rnd(100)+"vw";
+    s.style.animationDuration = (1.4+Math.random()*1.6)+"s";
+    s.style.fontSize = (16+rnd(22))+"px";
+    document.body.append(s);
+    setTimeout(()=>s.remove(), 3200);
+  }
+}
+
+// star & level bookkeeping after each session
+function awardStars(game, correct){
+  state.stars += correct;
+  // streak-based level up: 2 clean-ish sessions -> level up (max 5)
+  if (correct >= ROUNDS-1) state.streak[game]++;
+  else state.streak[game] = 0;
+  let leveled = false;
+  if (state.streak[game] >= 2 && state.lv[game] < 5){
+    state.lv[game]++; state.streak[game] = 0; leveled = true;
+  }
+  // sticker unlock every 10 stars
+  const unlockable = Math.floor(state.stars/10);
+  let newSticker = false;
+  if (unlockable > state.stickers && state.stickers < STICKERS.length){
+    state.stickers = Math.min(unlockable, STICKERS.length);
+    newSticker = true;
+  }
+  save(); renderStars(); renderLevels();
+  return { leveled, newSticker };
+}
+
+// stage-clear screen
+let lastGame = null;
+function stageClear(game, correct){
+  lastGame = game;
+  const { leveled, newSticker } = awardStars(game, correct);
+  show("scr-clear");
+  sfx.fanfare(); confetti(30);
+  $("clearEmoji").textContent = leveled ? "🏆" : pick(["🎉","🎖️","🌟","🚒"]);
+  let msg = `⭐を ${correct}こ ゲット!`;
+  let say = `ミッションクリア!スターを${correct}こゲット!`;
+  if (leveled){ msg += `\nレベルアップ!`; say += ` レベルアップ、おめでとう!`; }
+  if (newSticker){ msg += `\nあたらしいシールが もらえたよ!`; say += ` あたらしいシールがもらえたよ!シールちょうを みてみてね!`; }
+  $("clearMsg").innerText = "ミッション クリア!\n" + msg;
+  speak(say);
+}
+$("againBtn").onclick = ()=>{ sfx.tap(); if(lastGame) GAMES[lastGame](); };
+$("toMenuBtn").onclick = ()=>{ sfx.tap(); goMenu(); };
+
+function goMenu(){
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  renderLevels(); renderStars();
+  show("scr-menu");
+}
+$("homeBtn").onclick = ()=>{ sfx.tap(); goMenu(); };
+
+/* ============================================================
+   GAME 1: かぞえてレスキュー (counting)
+   ============================================================ */
+const COUNT_ANIMALS = [
+  ["🐶","わんちゃん"],["🐱","ねこちゃん"],["🐤","ひよこ"],["🐰","うさぎ"],
+  ["🐢","かめ"],["🐷","ぶた"],["💩","うんち"],["🦴","ほね"],["🚒","しょうぼうしゃ"],
+];
+let cnt = null;
+function startCount(){
+  cnt = { round:0, correct:0 };
+  show("scr-count");
+  nextCount();
+}
+function countMax(){ return [3,5,7,10,12][state.lv.count-1] || 10; }
+function nextCount(){
+  busy = false;
+  dots($("countDots"), ROUNDS, cnt.round);
+  const max = countMax();
+  const n = 1 + rnd(max);
+  const [emoji, name] = pick(COUNT_ANIMALS);
+  cnt.answer = n;
+  $("countPrompt").innerHTML = `${emoji} ${name}は なんこ(なんびき)?<span class="speakIc">🔊</span>`;
+  $("countPrompt").onclick = ()=>speak(`${name}は、なんびき いるかな?かぞえてみよう!`);
+  const field = $("countField");
+  field.innerHTML = "";
+  for(let i=0;i<n;i++){
+    const s = document.createElement("span");
+    s.textContent = emoji;
+    s.style.animationDelay = (i*0.1)+"s";
+    field.append(s);
+  }
+  // choices: answer + 2 neighbours
+  const set = new Set([n]);
+  while(set.size<3) set.add(Math.max(1, Math.min(max, n + (rnd(5)-2))));
+  const ans = $("countAnswers");
+  ans.innerHTML = "";
+  shuffle([...set]).forEach(v=>{
+    const b = document.createElement("button");
+    b.className = "ansBtn";
+    b.style.background = "linear-gradient(135deg,#ffa726,#fb8c00)";
+    b.style.fontSize = "clamp(34px,10vw,50px)";
+    b.textContent = v;
+    b.onclick = ()=>answerCount(b, v);
+    ans.append(b);
+  });
+  speak(`${name}は、なんびき いるかな?`);
+}
+function answerCount(btn, v){
+  if (busy) return;
+  if (v === cnt.answer){
+    busy = true;
+    btn.classList.add("correct"); sfx.good();
+    cnt.correct++; cnt.round++;
+    speak(pick(PRAISES) + ` ${v}だね!`);
+    cheer(true);
+    setTimeout(()=> cnt.round >= ROUNDS ? stageClear("count", cnt.correct) : nextCount(), 1400);
+  } else {
+    btn.classList.add("wrong"); sfx.bad();
+    speak("おしい!もういっかい かぞえてみよう!");
+  }
+}
+
+/* ============================================================
+   GAME 2: うんちポイポイ (tap poops into the toilet, count aloud)
+   ============================================================ */
+const NUM_JA = ["","いち","に","さん","よん","ご","ろく","なな","はち","きゅう","じゅう","じゅういち","じゅうに"];
+let pp = null;
+function startPoop(){
+  pp = { round:0 };
+  show("scr-poop");
+  nextPoop();
+}
+function poopN(){ return [3,4,5,7,10][state.lv.poop-1] || 5; }
+function nextPoop(){
+  busy = false;
+  dots($("poopDots"), ROUNDS, pp.round);
+  const stage = $("poopStage");
+  stage.querySelectorAll(".poop").forEach(e=>e.remove());
+  pp.total = poopN();
+  pp.flushed = 0;
+  $("poopCounter").textContent = "💩 " + pp.total;
+  $("poopPrompt").innerHTML = `💩を タッチして トイレに ながそう!<span class="speakIc">🔊</span>`;
+  $("poopPrompt").onclick = ()=>speak("うんちを タッチして、トイレに ながしちゃおう!いっしょに かぞえてね!");
+  // scatter poops (upper part of stage, away from the toilet)
+  for(let i=0;i<pp.total;i++){
+    const b = document.createElement("button");
+    b.className = "poop"; b.textContent = "💩";
+    b.style.left = (4 + Math.random()*78) + "%";
+    b.style.top  = (4 + Math.random()*55) + "%";
+    b.style.animationDelay = (Math.random()*1)+"s";
+    b.onclick = ()=>flushPoop(b);
+    stage.append(b);
+  }
+  speak("たいへん!うんちが いっぱい!タッチして トイレに ながそう!");
+}
+function flushPoop(b){
+  if (b.dataset.gone) return;
+  b.dataset.gone = "1";
+  sfx.pop();
+  const stage = $("poopStage"), toilet = $("toilet");
+  const sr = stage.getBoundingClientRect(), tr = toilet.getBoundingClientRect(), br = b.getBoundingClientRect();
+  b.classList.add("fly");
+  b.style.left = (tr.left - sr.left + tr.width/2 - br.width/2) + "px";
+  b.style.top  = (tr.top - sr.top) + "px";
+  b.style.transform = "scale(.25) rotate(360deg)";
+  b.style.opacity = ".4";
+  pp.flushed++;
+  const remain = pp.total - pp.flushed;
+  $("poopCounter").textContent = "💩 " + remain;
+  speak(NUM_JA[pp.flushed] || String(pp.flushed), 1.05);
+  setTimeout(()=>{
+    toilet.classList.add("gulp"); sfx.flush();
+    setTimeout(()=>toilet.classList.remove("gulp"), 200);
+    b.remove();
+  }, 520);
+  if (remain === 0){
+    busy = true;
+    pp.round++;
+    setTimeout(()=>{
+      cheer(true); sfx.good();
+      speak(`ぜんぶで ${NUM_JA[pp.total]}こ!トイレ ピッカピカ!`);
+      setTimeout(()=> pp.round >= ROUNDS ? stageClear("poop", pp.round) : nextPoop(), 1900);
+    }, 800);
+  }
+}
+
+/* ============================================================
+   GAME 3: ひらがなタッチ
+   ============================================================ */
+// [kana, reading for TTS, word, emoji]
+const HIRA = [
+  ["あ","あ","あひる","🦆"],["い","い","いぬ","🐕"],["う","う","うんち","💩"],["え","え","えんぴつ","✏️"],["お","お","おにぎり","🍙"],
+  ["か","か","かめ","🐢"],["き","き","きりん","🦒"],["く","く","くるま","🚗"],["け","け","けーき","🍰"],["こ","こ","こあら","🐨"],
+  ["さ","さ","さかな","🐟"],["し","し","しんかんせん","🚄"],["す","す","すいか","🍉"],["せ","せ","せみ","🦗"],["そ","そ","そら","🌤️"],
+  ["た","た","たまご","🥚"],["ち","ち","ちょうちょ","🦋"],["つ","つ","つき","🌙"],["て","て","てんとうむし","🐞"],["と","と","とけい","⏰"],
+  ["な","な","なす","🍆"],["に","に","にんじん","🥕"],["ぬ","ぬ","ぬいぐるみ","🧸"],["ね","ね","ねこ","🐱"],["の","の","のりもの","🚌"],
+  ["は","は","はな","🌸"],["ひ","ひ","ひこうき","✈️"],["ふ","ふ","ふね","⛴️"],["へ","へ","へび","🐍"],["ほ","ほ","ほし","⭐"],
+  ["ま","ま","まる","⭕"],["み","み","みかん","🍊"],["む","む","むし","🐛"],["め","め","めがね","👓"],["も","も","もも","🍑"],
+  ["や","や","やま","⛰️"],["ゆ","ゆ","ゆき","⛄"],["よ","よ","よる","🌃"],
+  ["ら","ら","らいおん","🦁"],["り","り","りんご","🍎"],["る","る","るびー","💎"],["れ","れ","れもん","🍋"],["ろ","ろ","ろけっと","🚀"],
+  ["わ","わ","わに","🐊"],["を","を","を","🎯"],["ん","ん","ぱん","🍞"],
+];
+let hr = null;
+function startHira(){
+  hr = { round:0, correct:0 };
+  show("scr-hira");
+  nextHira();
+}
+function hiraPool(){ // level widens the kana range
+  const spans = [10,15,25,35,HIRA.length];
+  return HIRA.slice(0, spans[state.lv.hira-1] || 10);
+}
+function hiraChoices(){ return [3,3,4,4,6][state.lv.hira-1] || 3; }
+function nextHira(){
+  busy = false;
+  dots($("hiraDots"), ROUNDS, hr.round);
+  const pool = hiraPool();
+  const target = pick(pool);
+  hr.target = target;
+  const others = shuffle(pool.filter(h=>h[0]!==target[0])).slice(0, hiraChoices()-1);
+  const opts = shuffle([target, ...others]);
+  $("hiraPrompt").innerHTML = `${target[3]} 「<span style="color:#d81b60">${target[0]}</span>」は どれかな?<span class="speakIc">🔊</span>`;
+  $("hiraPrompt").onclick = ()=>speak(`${target[2]}の、「${target[1]}」は どれかな?`);
+  const ans = $("hiraAnswers");
+  ans.style.gridTemplateColumns = `repeat(${opts.length<=3?opts.length:Math.ceil(opts.length/2)},1fr)`;
+  ans.innerHTML = "";
+  opts.forEach(h=>{
+    const b = document.createElement("button");
+    b.className = "ansBtn";
+    b.style.background = "linear-gradient(135deg,#ba68c8,#8e24aa)";
+    b.style.fontSize = "clamp(44px,13vw,64px)";
+    b.style.minHeight = "90px";
+    b.textContent = h[0];
+    b.onclick = ()=>answerHira(b, h);
+    ans.append(b);
+  });
+  speak(`${target[2]}の、「${target[1]}」は どれかな?`);
+}
+function answerHira(btn, h){
+  if (busy) return;
+  if (h[0] === hr.target[0]){
+    busy = true;
+    btn.classList.add("correct"); sfx.good();
+    hr.correct++; hr.round++;
+    speak(`${pick(PRAISES)} 「${hr.target[1]}」!${hr.target[2]}の「${hr.target[1]}」だね!`);
+    cheer(true);
+    setTimeout(()=> hr.round >= ROUNDS ? stageClear("hira", hr.correct) : nextHira(), 1700);
+  } else {
+    btn.classList.add("wrong"); sfx.bad();
+    speak(`それは「${h[1]}」だね。「${hr.target[1]}」は どれかな?`);
+  }
+}
+
+/* ============================================================
+   GAME 4: いろ・かたち
+   ============================================================ */
+const COLORS = [
+  ["あか","#e53935"],["あお","#1e88e5"],["きいろ","#fdd835"],["みどり","#43a047"],
+  ["ぴんく","#ec407a"],["むらさき","#8e24aa"],["おれんじ","#fb8c00"],["ちゃいろ","#795548"],
+];
+const SHAPES = [
+  ["まる", (c)=>`<circle cx="50" cy="50" r="38" fill="${c}"/>`],
+  ["さんかく", (c)=>`<polygon points="50,12 90,85 10,85" fill="${c}"/>`],
+  ["しかく", (c)=>`<rect x="14" y="14" width="72" height="72" rx="6" fill="${c}"/>`],
+  ["ほし", (c)=>`<polygon points="50,8 61,38 93,38 67,57 76,88 50,69 24,88 33,57 7,38 39,38" fill="${c}"/>`],
+  ["はーと", (c)=>`<path d="M50 88 C10 58 12 24 33 20 C44 18 50 28 50 32 C50 28 56 18 67 20 C88 24 90 58 50 88Z" fill="${c}"/>`],
+];
+let sh = null;
+function startShape(){
+  sh = { round:0, correct:0 };
+  show("scr-shape");
+  nextShape();
+}
+function shapeOpts(){ return [3,4,4,6,6][state.lv.shape-1] || 4; }
+function nextShape(){
+  busy = false;
+  dots($("shapeDots"), ROUNDS, sh.round);
+  const lvl = state.lv.shape;
+  const nColors = Math.min(COLORS.length, 3+lvl);
+  const nShapes = lvl<2 ? 3 : SHAPES.length;
+  const colors = COLORS.slice(0,nColors), shapes = SHAPES.slice(0,nShapes);
+  // build unique color+shape combos
+  const combos = [];
+  for(const c of colors) for(const s of shapes) combos.push([c,s]);
+  const optsList = shuffle(combos).slice(0, shapeOpts());
+  const target = pick(optsList);
+  sh.target = target;
+  const [tc, ts] = target;
+  $("shapePrompt").innerHTML = `<span style="color:${tc[1]}">${tc[0]}</span>の ${ts[0]}は どれ?<span class="speakIc">🔊</span>`;
+  $("shapePrompt").onclick = ()=>speak(`${tc[0]}の ${ts[0]}は、どれかな?`);
+  const ans = $("shapeAnswers");
+  ans.style.gridTemplateColumns = `repeat(${optsList.length<=3?optsList.length:Math.ceil(optsList.length/2)},1fr)`;
+  ans.innerHTML = "";
+  optsList.forEach(([c,s])=>{
+    const b = document.createElement("button");
+    b.className = "ansBtn";
+    b.style.background = "#fff";
+    b.style.border = "3px solid #b0bec5";
+    b.innerHTML = `<svg viewBox="0 0 100 100" style="width:100%;max-height:110px">${s[1](c[1])}</svg>`;
+    b.onclick = ()=>answerShape(b, c, s);
+    ans.append(b);
+  });
+  speak(`${tc[0]}の ${ts[0]}は、どれかな?`);
+}
+function answerShape(btn, c, s){
+  if (busy) return;
+  const [tc, ts] = sh.target;
+  if (c[0]===tc[0] && s[0]===ts[0]){
+    busy = true;
+    btn.classList.add("correct"); sfx.good();
+    sh.correct++; sh.round++;
+    speak(`${pick(PRAISES)} ${tc[0]}の ${ts[0]}だね!`);
+    cheer(true);
+    setTimeout(()=> sh.round >= ROUNDS ? stageClear("shape", sh.correct) : nextShape(), 1600);
+  } else {
+    btn.classList.add("wrong"); sfx.bad();
+    speak(`それは ${c[0]}の ${s[0]}だね。${tc[0]}の ${ts[0]}は どれかな?`);
+  }
+}
+
+/* ============================================================
+   GAME 5: ペアさがし (memory)
+   ============================================================ */
+const MEM_EMOJI = ["🐶","🐱","🤖","💩","🚒","🦴","🍖","⭐","🚽","🐾","🎖️","🍩"];
+let mem = null;
+function startMemory(){
+  const pairs = [2,3,4,6,8][state.lv.memory-1] || 3;
+  const faces = shuffle(MEM_EMOJI).slice(0, pairs);
+  const cards = shuffle([...faces, ...faces]);
+  mem = { open:[], matched:0, pairs, lock:false, moves:0 };
+  show("scr-memory");
+  $("memPrompt").innerHTML = `おなじ カードを みつけてね!<span class="speakIc">🔊</span>`;
+  $("memPrompt").onclick = ()=>speak("カードを めくって、おなじ えを みつけてね!");
+  const grid = $("memGrid");
+  const cols = cards.length<=6 ? 3 : 4;
+  grid.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+  grid.innerHTML = "";
+  cards.forEach(face=>{
+    const b = document.createElement("button");
+    b.className = "memCard";
+    b.innerHTML = `<div class="memInner"><div class="memFace memBack"></div><div class="memFace memFront">${face}</div></div>`;
+    b.dataset.face = face;
+    b.onclick = ()=>flipCard(b);
+    grid.append(b);
+  });
+  speak("カードを めくって、おなじ えを みつけてね!");
+}
+function flipCard(b){
+  if (mem.lock || b.classList.contains("flip")) return;
+  sfx.flip();
+  b.classList.add("flip");
+  mem.open.push(b);
+  if (mem.open.length < 2) return;
+  mem.lock = true; mem.moves++;
+  const [a,c] = mem.open;
+  if (a.dataset.face === c.dataset.face){
+    setTimeout(()=>{
+      a.classList.add("done"); c.classList.add("done");
+      sfx.good();
+      mem.matched++;
+      mem.open = []; mem.lock = false;
+      if (mem.matched >= mem.pairs){
+        // score: full stars if efficient, else fewer
+        const bonus = mem.moves <= mem.pairs+1 ? ROUNDS : mem.moves <= mem.pairs*2 ? ROUNDS-1 : 3;
+        speak("ぜんぶ みつけた!すごーい!");
+        setTimeout(()=>stageClear("memory", bonus), 1200);
+      } else {
+        speak(pick(["みつけた!","ペア はっけん!","いいね!"]));
+      }
+    }, 450);
+  } else {
+    setTimeout(()=>{
+      a.classList.remove("flip"); c.classList.remove("flip");
+      mem.open = []; mem.lock = false;
+    }, 900);
+  }
+}
+
+/* ============================================================
+   sticker book
+   ============================================================ */
+const STICKERS = ["🐶","💩","🚒","🤖","🦄","🐱","🌈","🚀","🦖","👑","🍦","⚽","🎸","🐘","🛸","🧁","🦁","🎩","🐙","🏆"];
+function openStickers(){
+  show("scr-sticker");
+  const grid = $("stickerGrid");
+  grid.innerHTML = "";
+  STICKERS.forEach((e,i)=>{
+    const d = document.createElement("div");
+    const unlocked = i < state.stickers;
+    d.className = "stk" + (unlocked ? "" : " locked") + (unlocked && i===state.stickers-1 ? " fresh" : "");
+    d.textContent = e;
+    if (unlocked) d.onclick = ()=>{ sfx.pop(); speak(pick(["かっこいい!","ぴかぴか!","おきにいり?"])); };
+    grid.append(d);
+  });
+  const next = 10 - (state.stars % 10);
+  if (state.stickers >= STICKERS.length){
+    $("stickerNote").textContent = "ぜんぶ あつめたよ!コンプリート おめでとう!👑";
+    speak("シール ぜんぶ コンプリート!すごすぎる!");
+  } else {
+    $("stickerNote").textContent = `⭐を あと${next}こ あつめると つぎのシールが もらえるよ!`;
+    speak(state.stickers > 0 ? `シールが ${state.stickers}まい あるよ!あと ほし ${next}こで つぎのシールだよ!` : `ゲームで ほしを あつめると、シールが もらえるよ!`);
+  }
+}
+
+/* ============================================================
+   menu wiring
+   ============================================================ */
+const GAMES = { count:startCount, poop:startPoop, hira:startHira, shape:startShape, memory:startMemory, sticker:openStickers };
+document.querySelectorAll(".menuCard").forEach(card=>{
+  card.onclick = ()=>{ ac(); sfx.tap(); GAMES[card.dataset.game](); };
+});
+
+renderStars(); renderLevels();
+// greet on first touch (autoplay policies require a gesture first)
+let greeted = false;
+document.body.addEventListener("pointerdown", ()=>{
+  if (greeted) return; greeted = true;
+  ac();
+  if ($("scr-menu").classList.contains("active"))
+    speak("わんわんレスキュー ちいくランドへ ようこそ!すきなゲームを えらんでね!");
+}, { once:false });
+</script>
+</body>
+</html>
