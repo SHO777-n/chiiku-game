@@ -4,6 +4,7 @@
 |---|---|---|
 | 🐶 わんわんレスキュー ちいくランド | 4歳児向け知育 | `index.html` を開く |
 | ⚔️ アルヴェリア 〜精霊の森〜 | ファンタジー3D RPG | `rpg/index.html` を開く |
+| 🔔 残響のオルセディア | 2DアクションRPG(開発中) | [`orsedia/README.md`](orsedia/README.md) 参照 |
 
 ---
 
