@@ -1,33 +1,41 @@
 /**
  * 戦闘計算の純粋ロジック(Phaser非依存)。
- * Phase 1 は固定値ダメージだが、将来の防御・属性追加に耐える形にしておく。
+ * ダメージ式: (基礎値 + 攻撃力) × 倍率 × 属性補正 − 防御力(最低1)
  */
+import { elementMultiplier, type Element, type ElementProfile } from './effects';
 
 export interface DamageInput {
-  /** 基礎ダメージ */
   base: number;
-  /** 倍率(クリティカル・スキル用。省略時 1) */
+  attack?: number;
   multiplier?: number;
-  /** 加算補正(装備用。省略時 0) */
-  bonus?: number;
+  element?: Element;
+  targetProfile?: ElementProfile;
+  targetDefense?: number;
 }
 
-/** ダメージを計算する。最低 1 を保証する。 */
 export function calculateDamage(input: DamageInput): number {
-  const raw = input.base * (input.multiplier ?? 1) + (input.bonus ?? 0);
+  const elem =
+    input.element && input.targetProfile
+      ? elementMultiplier(input.element, input.targetProfile)
+      : 1;
+  const raw =
+    (input.base + (input.attack ?? 0)) * (input.multiplier ?? 1) * elem -
+    (input.targetDefense ?? 0);
   return Math.max(1, Math.round(raw));
 }
 
-/** HPへダメージを適用する。0 未満にはならない。 */
 export function applyDamage(hp: number, damage: number): number {
   return Math.max(0, hp - Math.max(0, damage));
+}
+
+export function heal(hp: number, maxHp: number, amount: number): number {
+  return Math.min(maxHp, hp + Math.max(0, amount));
 }
 
 export function isDead(hp: number): boolean {
   return hp <= 0;
 }
 
-/** 無敵時間中かどうか(now, until はミリ秒タイムスタンプ) */
 export function isInvulnerable(now: number, invulnerableUntil: number): boolean {
   return now < invulnerableUntil;
 }

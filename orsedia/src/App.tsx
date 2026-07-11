@@ -2,10 +2,10 @@ import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 import { buildGameConfig } from './game/config';
 import { Hud } from './ui/Hud';
+import { Menu } from './ui/Menu';
+import { Shop } from './ui/Shop';
 
-/**
- * アプリシェル。Phaser ゲームのマウントと React 製 HUD の重ね合わせを行う。
- */
+/** アプリシェル。Phaser ゲームと React 製 UI(HUD/メニュー/ショップ)の重ね合わせ。 */
 export function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -24,6 +24,8 @@ export function App() {
       <div className="game-wrapper">
         <div ref={containerRef} className="game-container" />
         <Hud />
+        <Menu />
+        <Shop />
       </div>
     </div>
   );
