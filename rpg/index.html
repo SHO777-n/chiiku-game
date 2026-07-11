@@ -10,6 +10,8 @@
   html,body { height:100%; overflow:hidden; background:#000; }
   body { font-family:'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP',serif; color:#e8dcc0; }
   #c { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  #film { position:fixed; inset:0; z-index:8; pointer-events:none;
+    background:radial-gradient(ellipse at center, transparent 58%, rgba(8,12,22,.30) 100%); }
 
   /* ===== HUD ===== */
   .hud { position:fixed; z-index:10; pointer-events:none; }
@@ -67,6 +69,8 @@
   .dmgNum.crit { color:#ffd34a; font-size:24px; }
   .dmgNum.heal { color:#8dff9a; }
   .dmgNum.hurt { color:#ff6a5a; }
+  #saveInd { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); z-index:12; font-size:12px;
+    letter-spacing:2px; color:rgba(232,220,192,.85); text-shadow:0 1px 4px #000; opacity:0; transition:opacity .6s; pointer-events:none; }
 
   /* ===== title screen ===== */
   #title { position:fixed; inset:0; z-index:30; display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -75,17 +79,25 @@
     text-shadow:0 0 34px rgba(140,255,200,.35), 0 4px 12px #000; margin-bottom:4px; }
   #title h2 { font-size:clamp(12px,3vw,16px); letter-spacing:6px; color:#8fbfa8; font-weight:normal; margin-bottom:26px; }
   #story { max-width:560px; font-size:clamp(13px,3.2vw,15px); line-height:2; color:#cfc4a4; margin-bottom:28px; }
-  #startBtn { font-family:inherit; font-size:clamp(16px,4vw,20px); letter-spacing:4px; color:#1a130a;
+  #btnRow { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; }
+  .titleBtn { font-family:inherit; font-size:clamp(15px,3.8vw,19px); letter-spacing:4px; color:#1a130a;
     background:linear-gradient(180deg,#f0d68a,#c9a24d); border:1px solid #8a6a2a; border-radius:6px;
-    padding:14px 46px; cursor:pointer; box-shadow:0 0 26px rgba(240,214,138,.35), 0 4px 0 #7a5c22; }
-  #startBtn:active { transform:translateY(3px); box-shadow:0 0 26px rgba(240,214,138,.35), 0 1px 0 #7a5c22; }
+    padding:14px 38px; cursor:pointer; box-shadow:0 0 26px rgba(240,214,138,.35), 0 4px 0 #7a5c22; }
+  .titleBtn:active { transform:translateY(3px); box-shadow:0 0 26px rgba(240,214,138,.35), 0 1px 0 #7a5c22; }
+  #contBtn { display:none; background:linear-gradient(180deg,#a8e8b0,#5aa864); border-color:#2a6a3a;
+    box-shadow:0 0 26px rgba(140,255,180,.3), 0 4px 0 #2f6a3a; }
+  #contBtn:active { box-shadow:0 0 26px rgba(140,255,180,.3), 0 1px 0 #2f6a3a; }
   #ctl { margin-top:26px; font-size:12px; color:#8f8770; line-height:1.9; letter-spacing:1px; }
   #loading { position:fixed; inset:0; z-index:40; background:#060a08; display:flex; align-items:center; justify-content:center;
     color:#8fbfa8; letter-spacing:4px; font-size:14px; }
 </style>
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.min.js" } }
+</script>
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="film"></div>
 <div id="vignette"></div>
 
 <div class="hud" id="statPanel">
@@ -110,6 +122,7 @@
 <div id="joy"><div id="joyKnob"></div></div>
 <div id="toasts"></div>
 <div id="lvup">LEVEL UP!</div>
+<div id="saveInd">✧ セーブしました</div>
 
 <div id="title">
   <h1>アルヴェリア</h1>
@@ -121,17 +134,25 @@
     魔導士たる汝よ、大樹の祠より旅立ち、<br>
     <span style="color:#7fe8ff">7つのクリスタル</span>を集めて森に祝福を取り戻せ。
   </div>
-  <button id="startBtn">冒 険 を は じ め る</button>
+  <div id="btnRow">
+    <button id="contBtn" class="titleBtn">つ づ き か ら</button>
+    <button id="startBtn" class="titleBtn">は じ め か ら</button>
+  </div>
   <div id="ctl">
     移動: WASD / 矢印キー(スマホ: 画面左をドラッグ)<br>
     視点: マウスドラッグ(スマホ: 画面右をドラッグ) ホイールでズーム<br>
-    攻撃: SPACE / ✦ボタン — 魔力の矢は敵を追尾する
+    攻撃: SPACE / ✦ボタン — 魔力の矢は敵を追尾する<br>
+    進行状況は自動セーブされます
   </div>
 </div>
 <div id="loading">森 を 生 成 し て い ま す …</div>
 
 <script type="module">
-import * as THREE from './lib/three.module.min.js';
+import * as THREE from 'three';
+import {EffectComposer} from './lib/jsm/postprocessing/EffectComposer.js';
+import {RenderPass} from './lib/jsm/postprocessing/RenderPass.js';
+import {UnrealBloomPass} from './lib/jsm/postprocessing/UnrealBloomPass.js';
+import {OutputPass} from './lib/jsm/postprocessing/OutputPass.js';
 
 /* ============================================================
    ユーティリティ / ノイズ
@@ -140,11 +161,12 @@ const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const smoothstep=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
 const rand=(a=1,b)=>b===undefined?Math.random()*a:a+Math.random()*(b-a);
+const isMobile=matchMedia('(pointer:coarse)').matches;
 
 /* --- 2D simplex noise (Gustavson) --- */
 const Simplex=(()=> {
   const grad=[[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
-  const p=new Uint8Array(512); const perm=new Uint8Array(512);
+  const perm=new Uint8Array(512);
   let seed=1337;
   const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
   const base=[...Array(256).keys()];
@@ -176,19 +198,16 @@ function fbm(x,y,oct=5){
 /* ============================================================
    地形の高さ関数(描画・移動・配置で共有)
 ============================================================ */
-const WORLD=1300;           // 地形一辺
+const WORLD=1300;
 const WATER_Y=0;
 function getHeight(x,z){
   const d=Math.hypot(x,z);
-  let h=(fbm(x*0.004,z*0.004,5)+1)*0.5;      // 0..1
+  let h=(fbm(x*0.004,z*0.004,5)+1)*0.5;
   let base=Math.pow(h,1.65)*62-11;
-  // 蛇行する川・湖の谷
   const riv=fbm(x*0.0023+37.2,z*0.0023-71.8,3);
   base-=Math.max(0,0.34-Math.abs(riv))*46;
-  // 外周の山脈
   const rim=smoothstep(300,520,d);
-  base+=rim*110*(0.55+0.45*((fbm(x*0.008,z*0.008,3)+1)*0.5));
-  // 出発地点(祠)周辺を平らに
+  base+=rim*135*(0.55+0.45*((fbm(x*0.008,z*0.008,3)+1)*0.5));
   const flat=1-smoothstep(6,42,d);
   base=lerp(base,3.2,flat*0.92);
   return base;
@@ -199,38 +218,48 @@ function getSlope(x,z){
   const dz=getHeight(x,z+e)-getHeight(x,z-e);
   return Math.hypot(dx,dz)/(2*e);
 }
+const meadowNoise=(x,z)=>smoothstep(0.02,0.42,fbm(x*0.012+77,z*0.012-33,3));
 
 /* ============================================================
-   レンダラ / シーン
+   レンダラ / シーン / ポストプロセス
 ============================================================ */
-const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true,powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,isMobile?1.5:1.75));
 renderer.setSize(innerWidth,innerHeight);
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.05;
+renderer.toneMappingExposure=1.12;
 
 const scene=new THREE.Scene();
-scene.fog=new THREE.FogExp2(0xa9c8dd,0.0011);
+scene.fog=new THREE.FogExp2(0xbcd0de,0.00095);
 const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,3000);
 
-const timeU={value:0};      // 共有時間ユニフォーム
+const composerRT=new THREE.WebGLRenderTarget(2,2,{type:THREE.HalfFloatType,samples:isMobile?2:4});
+const composer=new EffectComposer(renderer,composerRT);
+composer.setPixelRatio(renderer.getPixelRatio());
+composer.setSize(innerWidth,innerHeight);
+composer.addPass(new RenderPass(scene,camera));
+const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth/2,innerHeight/2),0.32,0.6,0.8);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+const timeU={value:0};
 
 /* --- ライティング --- */
-const hemi=new THREE.HemisphereLight(0xbfd8ff,0x55604a,0.5);
+const hemi=new THREE.HemisphereLight(0xcfe0f5,0x687a52,0.55);
 scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xfff2dd,2.2);
 sun.castShadow=true;
-sun.shadow.mapSize.set(2048,2048);
-sun.shadow.camera.near=1; sun.shadow.camera.far=400;
-sun.shadow.camera.left=-90; sun.shadow.camera.right=90;
-sun.shadow.camera.top=90; sun.shadow.camera.bottom=-90;
+sun.shadow.mapSize.set(isMobile?1024:2048,isMobile?1024:2048);
+sun.shadow.camera.near=1; sun.shadow.camera.far=420;
+sun.shadow.camera.left=-95; sun.shadow.camera.right=95;
+sun.shadow.camera.top=95; sun.shadow.camera.bottom=-95;
 sun.shadow.bias=-0.0004;
 scene.add(sun); scene.add(sun.target);
 
 /* ============================================================
-   空(カスタムシェーダ: 昼夜・夕焼け・雲・星・太陽・月)
+   空(昼夜・夕焼け・雲・星・太陽・月・地平の霞)
 ============================================================ */
 const skyUniforms={
   uSunDir:{value:new THREE.Vector3(0,1,0)},
@@ -263,16 +292,16 @@ const sky=new THREE.Mesh(
         float elev=uSunDir.y;
         float dayF=smoothstep(-0.09,0.22,elev);
         float duskF=(1.0-smoothstep(0.10,0.42,abs(elev)));
-        vec3 zen=mix(vec3(0.012,0.02,0.06),vec3(0.14,0.36,0.72),dayF);
-        vec3 hor=mix(vec3(0.05,0.07,0.13),vec3(0.64,0.79,0.92),dayF);
+        vec3 zen=mix(vec3(0.012,0.02,0.06),vec3(0.22,0.45,0.74),dayF);
+        vec3 hor=mix(vec3(0.05,0.07,0.13),vec3(0.78,0.86,0.93),dayF);
         float sunAzi=pow(max(dot(normalize(vec3(dir.x,0.,dir.z)),normalize(vec3(uSunDir.x,0.001,uSunDir.z))),0.0),2.0);
-        hor=mix(hor,vec3(0.99,0.44,0.20),duskF*(0.30+0.62*sunAzi));
-        float hmix=pow(1.0-clamp(dir.y,0.,1.),1.7);
+        hor=mix(hor,vec3(0.99,0.48,0.24),duskF*(0.30+0.62*sunAzi));
+        float hmix=pow(1.0-clamp(dir.y,0.,1.),1.5);
         vec3 col=mix(zen,hor,hmix);
         // 太陽
         float sd=max(dot(dir,uSunDir),0.0);
         vec3 sunCol=mix(vec3(1.0,0.55,0.25),vec3(1.0,0.95,0.85),smoothstep(0.0,0.3,elev));
-        col+=sunCol*(pow(sd,900.0)*5.0+pow(sd,80.0)*0.45+pow(sd,6.0)*0.14)*smoothstep(-0.12,0.0,elev+0.06);
+        col+=sunCol*(pow(sd,900.0)*5.0+pow(sd,80.0)*0.45+pow(sd,6.0)*0.16)*smoothstep(-0.12,0.0,elev+0.06);
         // 月
         vec3 mdir=-uSunDir;
         float md=max(dot(dir,mdir),0.0);
@@ -285,11 +314,12 @@ const sky=new THREE.Mesh(
         col+=vec3(star);
         // 雲
         if(dir.y>0.015){
-          vec2 cuv=dir.xz/(dir.y+0.09)*0.32+vec2(uTime*0.0045,uTime*0.0016);
-          float cl=fbm2(cuv*2.1);
-          cl=smoothstep(0.48,0.78,cl)*smoothstep(0.015,0.10,dir.y);
-          vec3 cCol=mix(vec3(0.06,0.07,0.11),mix(vec3(1.0),vec3(1.0,0.62,0.42),duskF*0.8),max(dayF,0.12));
-          col=mix(col,cCol,cl*0.8);
+          vec2 cuv=dir.xz/(dir.y+0.10)*0.30+vec2(uTime*0.0045,uTime*0.0016);
+          float cl=fbm2(cuv*2.0);
+          cl=smoothstep(0.44,0.72,cl)*smoothstep(0.015,0.10,dir.y);
+          float shade=fbm2(cuv*3.7+2.0);
+          vec3 cCol=mix(vec3(0.06,0.07,0.11),mix(vec3(0.98,0.99,1.0)-shade*0.18,vec3(1.0,0.66,0.46),duskF*0.8),max(dayF,0.12));
+          col=mix(col,cCol,cl*0.85);
         }
         gl_FragColor=vec4(col,1.0);
       }`
@@ -298,17 +328,18 @@ const sky=new THREE.Mesh(
 scene.add(sky);
 
 /* ============================================================
-   地形メッシュ(頂点カラー: 砂・草・岩・雪)
+   地形(頂点カラー + ピクセル単位のディテールシェーダ)
 ============================================================ */
 const loadingEl=document.getElementById('loading');
-const SEG=240;
+const SEG=250;
 const terrainGeo=new THREE.PlaneGeometry(WORLD,WORLD,SEG,SEG);
 terrainGeo.rotateX(-Math.PI/2);
 {
   const pos=terrainGeo.attributes.position;
   const colors=new Float32Array(pos.count*3);
-  const cSand=new THREE.Color(0x9d8f66), cGrass1=new THREE.Color(0x3f6f33), cGrass2=new THREE.Color(0x577f36),
-        cRock=new THREE.Color(0x6d675f), cSnow=new THREE.Color(0xe8ecf0), cDirt=new THREE.Color(0x5c4f38);
+  const cSand=new THREE.Color(0xb0a06b), cGrass1=new THREE.Color(0x4a7a2c), cGrass2=new THREE.Color(0x77a844),
+        cMeadow=new THREE.Color(0x9ab54e),
+        cRock=new THREE.Color(0x8a857c), cSnow=new THREE.Color(0xeef2f5), cDirt=new THREE.Color(0x6b5a3c);
   const tmp=new THREE.Color();
   for(let i=0;i<pos.count;i++){
     const x=pos.getX(i), z=pos.getZ(i);
@@ -317,21 +348,50 @@ terrainGeo.rotateX(-Math.PI/2);
     const sl=getSlope(x,z);
     const jitter=fbm(x*0.05,z*0.05,3)*0.5;
     tmp.copy(cGrass1).lerp(cGrass2,clamp((fbm(x*0.02+9,z*0.02-4,3)+1)*0.5+jitter*0.3,0,1));
+    tmp.lerp(cMeadow,meadowNoise(x,z)*0.55);
     if(h<1.4+jitter) tmp.lerp(cSand,smoothstep(1.4+jitter,-0.5,h));
-    if(sl>0.45) tmp.lerp(cDirt,smoothstep(0.45,0.7,sl));
-    if(sl>0.62||h>44) tmp.lerp(cRock,Math.max(smoothstep(0.62,0.95,sl),smoothstep(44,52,h)));
+    if(sl>0.62) tmp.lerp(cDirt,smoothstep(0.62,0.9,sl));
+    if(sl>0.8||h>44) tmp.lerp(cRock,Math.max(smoothstep(0.8,1.15,sl),smoothstep(44,52,h)));
     if(h>62+jitter*6) tmp.lerp(cSnow,smoothstep(62,72,h));
     colors[i*3]=tmp.r; colors[i*3+1]=tmp.g; colors[i*3+2]=tmp.b;
   }
   terrainGeo.setAttribute('color',new THREE.BufferAttribute(colors,3));
   terrainGeo.computeVertexNormals();
 }
-const terrain=new THREE.Mesh(terrainGeo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.95,metalness:0}));
+const GLSL_NOISE=`
+  float thash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+  float tnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+    return mix(mix(thash(i),thash(i+vec2(1,0)),f.x),mix(thash(i+vec2(0,1)),thash(i+vec2(1,1)),f.x),f.y);}
+  float tfbm(vec2 p){float v=0.,a=.5;for(int i=0;i<4;i++){v+=a*tnoise(p);p*=2.13;a*=.5;}return v;}
+`;
+const terrainMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.95,metalness:0});
+terrainMat.onBeforeCompile=(sh)=>{
+  sh.vertexShader='varying vec3 vWPos;\nvarying vec3 vNormW;\n'+sh.vertexShader.replace(
+    '#include <begin_vertex>',
+    `#include <begin_vertex>
+     vWPos=(modelMatrix*vec4(transformed,1.0)).xyz;
+     vNormW=normalize(mat3(modelMatrix)*normal);`
+  );
+  sh.fragmentShader='varying vec3 vWPos;\nvarying vec3 vNormW;\n'+GLSL_NOISE+sh.fragmentShader.replace(
+    '#include <color_fragment>',
+    `#include <color_fragment>
+     float dLarge=tfbm(vWPos.xz*0.055);
+     float dMid=tfbm(vWPos.xz*0.5);
+     float dFine=tnoise(vWPos.xz*5.5);
+     diffuseColor.rgb*=0.80+0.24*dLarge+0.16*dMid+0.10*dFine;
+     float rockM=1.0-smoothstep(0.55,0.8,vNormW.y);
+     float strata=0.8+0.2*sin(vWPos.y*1.3+tfbm(vWPos.xz*0.22)*5.0);
+     vec3 rockCol=vec3(0.46,0.44,0.41)*strata*(0.7+0.5*dMid);
+     rockCol=mix(rockCol,vec3(0.35,0.44,0.28),smoothstep(0.5,0.9,tfbm(vWPos.xz*0.14+7.0))*0.45); // 苔
+     diffuseColor.rgb=mix(diffuseColor.rgb,rockCol,rockM*0.8);`
+  );
+};
+const terrain=new THREE.Mesh(terrainGeo,terrainMat);
 terrain.receiveShadow=true;
 scene.add(terrain);
 
 /* ============================================================
-   水面(フレネル + 手続き波 + 太陽スペキュラ)
+   水面
 ============================================================ */
 const waterUniforms={
   uTime:timeU,
@@ -373,21 +433,19 @@ const water=new THREE.Mesh(
         vec2 p=vWorld.xz;
         float e=0.32;
         float hC=waveH(p), hX=waveH(p+vec2(e,0.)), hZ=waveH(p+vec2(0.,e));
-        vec3 n=normalize(vec3(-(hX-hC)/e*0.55,1.0,-(hZ-hC)/e*0.55));
+        vec3 n=normalize(vec3(-(hX-hC)/e*0.5,1.0,-(hZ-hC)/e*0.5));
         vec3 view=normalize(uCamPos-vWorld);
         float fres=pow(1.0-max(dot(view,n),0.0),3.0);
         float dayF=smoothstep(-0.09,0.22,uSunDir.y);
-        vec3 deep=mix(vec3(0.008,0.02,0.03),vec3(0.02,0.10,0.11),dayF);
-        vec3 shal=mix(vec3(0.015,0.035,0.05),vec3(0.05,0.21,0.20),dayF);
+        vec3 deep=mix(vec3(0.008,0.02,0.03),vec3(0.03,0.11,0.12),dayF);
+        vec3 shal=mix(vec3(0.015,0.035,0.05),vec3(0.06,0.22,0.21),dayF);
         vec3 col=mix(deep,shal,clamp(hC,0.,1.)*0.7);
         col=mix(col,uSkyCol,fres*0.75);
         float spec=pow(max(dot(reflect(-uSunDir,n),view),0.0),160.0)*3.0*max(uSunDir.y,0.0);
-        // 月光の反射
         spec+=pow(max(dot(reflect(uSunDir,n),view),0.0),220.0)*0.9*smoothstep(0.02,-0.14,uSunDir.y);
         col+=vec3(spec);
-        float sparkle=smoothstep(0.86,1.0,vnoise(p*3.1+uTime*0.7))*0.25*dayF;
+        float sparkle=smoothstep(0.88,1.0,vnoise(p*3.1+uTime*0.7))*0.18*dayF;
         col+=vec3(sparkle);
-        // 霧
         float dist=length(uCamPos-vWorld);
         float fogF=1.0-exp(-uFogDensity*uFogDensity*dist*dist);
         col=mix(col,uFogColor,clamp(fogF,0.,1.));
@@ -400,7 +458,59 @@ water.position.y=WATER_Y;
 scene.add(water);
 
 /* ============================================================
-   植生・岩の配置(インスタンシング)
+   手続きテクスチャ(グロー・葉・花びら)
+============================================================ */
+function glowTexture(){
+  const cv=document.createElement('canvas'); cv.width=cv.height=64;
+  const ctx=cv.getContext('2d');
+  const gr=ctx.createRadialGradient(32,32,2,32,32,30);
+  gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=gr; ctx.fillRect(0,0,64,64);
+  const tx=new THREE.CanvasTexture(cv); tx.colorSpace=THREE.SRGBColorSpace;
+  return tx;
+}
+const texGlow=glowTexture();
+
+function leafTexture(){
+  const cv=document.createElement('canvas'); cv.width=cv.height=128;
+  const ctx=cv.getContext('2d');
+  const shades=['#cdd9b0','#bccf9e','#dbe6c2','#b2c896','#c6d6a8'];
+  for(let i=0;i<90;i++){
+    const a=rand(Math.PI*2), r=Math.sqrt(Math.random())*52;
+    const x=64+Math.cos(a)*r, y=64+Math.sin(a)*r;
+    ctx.save();
+    ctx.translate(x,y); ctx.rotate(rand(Math.PI*2));
+    ctx.fillStyle=shades[Math.floor(rand(shades.length))];
+    ctx.globalAlpha=rand(0.85,1);
+    ctx.beginPath();
+    ctx.ellipse(0,0,rand(5,9),rand(2.6,4.2),0,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+  const tx=new THREE.CanvasTexture(cv); tx.colorSpace=THREE.SRGBColorSpace;
+  return tx;
+}
+const texLeaf=leafTexture();
+
+function flowerTexture(){
+  const cv=document.createElement('canvas'); cv.width=cv.height=64;
+  const ctx=cv.getContext('2d');
+  ctx.translate(32,32);
+  for(let i=0;i<6;i++){
+    ctx.save(); ctx.rotate(i/6*Math.PI*2);
+    ctx.fillStyle='#ffffff';
+    ctx.beginPath(); ctx.ellipse(0,-15,7,15,0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle='#d8a020';
+  ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill();
+  const tx=new THREE.CanvasTexture(cv); tx.colorSpace=THREE.SRGBColorSpace;
+  return tx;
+}
+const texFlower=flowerTexture();
+
+/* ============================================================
+   植生・岩の配置
 ============================================================ */
 const dummy=new THREE.Object3D();
 const cTmp=new THREE.Color();
@@ -416,55 +526,106 @@ function scatter(count,valid){
 }
 const treeValid=(x,z,h)=>h>2&&h<46&&getSlope(x,z)<0.5&&fbm(x*0.006+55,z*0.006,3)>-0.25&&Math.hypot(x,z)>14;
 
-/* --- 広葉樹 --- */
-function makeCanopyGeo(r){
-  const g=new THREE.IcosahedronGeometry(r,1);
-  const p=g.attributes.position;
-  for(let i=0;i<p.count;i++){
-    const v=new THREE.Vector3().fromBufferAttribute(p,i);
-    const s=1+0.28*Simplex(v.x*0.9+3,v.y*0.9+v.z*0.7);
-    v.multiplyScalar(s); p.setXYZ(i,v.x,v.y*1.15,v.z);
-  }
-  g.computeVertexNormals(); return g;
-}
+/* --- 葉カード共有マテリアル(広葉樹・茂み・大樹) --- */
+const leafMat=new THREE.MeshStandardMaterial({map:texLeaf,alphaTest:0.45,side:THREE.DoubleSide,roughness:0.9});
+const leafDepth=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking,map:texLeaf,alphaTest:0.45});
+leafMat.onBeforeCompile=(sh)=>{
+  sh.uniforms.uTime=timeU;
+  sh.vertexShader='uniform float uTime;\n'+sh.vertexShader.replace(
+    '#include <begin_vertex>',
+    `#include <begin_vertex>
+     float lph=instanceMatrix[3][0]*0.4+instanceMatrix[3][2]*0.5;
+     transformed.x+=sin(uTime*1.2+lph)*0.05;
+     transformed.z+=cos(uTime*0.9+lph*1.4)*0.05;`
+  );
+};
+
+/* --- 広葉樹(幹 + 葉カード) --- */
+const TREE_N=520, CARDS_PER_TREE=12;
+const BUSH_N=320, CARDS_PER_BUSH=6;
 {
-  const spots=scatter(800,treeValid);
-  const trunkGeo=new THREE.CylinderGeometry(0.32,0.55,5.6,7);
-  trunkGeo.translate(0,2.8,0);
-  const canGeo=makeCanopyGeo(3.0); canGeo.translate(0,6.8,0);
-  const trunkMat=new THREE.MeshStandardMaterial({color:0x5a4630,roughness:0.95});
-  const canMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.9});
-  const trunks=new THREE.InstancedMesh(trunkGeo,trunkMat,spots.length);
-  const cans=new THREE.InstancedMesh(canGeo,canMat,spots.length);
-  spots.forEach((s,i)=>{
+  const treeSpots=scatter(TREE_N,treeValid);
+  const bushSpots=scatter(BUSH_N,(x,z,h)=>h>1.6&&h<40&&getSlope(x,z)<0.5&&Math.hypot(x,z)>10);
+  // 幹
+  const trunkGeo=new THREE.CylinderGeometry(0.28,0.62,5.8,7);
+  trunkGeo.translate(0,2.9,0);
+  const trunkMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95});
+  const trunks=new THREE.InstancedMesh(trunkGeo,trunkMat,treeSpots.length);
+  // 葉カード(木 + 茂みを1つのInstancedMeshに)
+  const cardGeo=new THREE.PlaneGeometry(3.6,3.6);
+  const totalCards=treeSpots.length*CARDS_PER_TREE+bushSpots.length*CARDS_PER_BUSH;
+  const cards=new THREE.InstancedMesh(cardGeo,leafMat,totalCards);
+  let ci=0;
+  treeSpots.forEach((s,i)=>{
+    const sc=rand(0.8,1.7);
     dummy.position.set(s[0],s[1]-0.3,s[2]);
     dummy.rotation.set(rand(-0.05,0.05),rand(Math.PI*2),rand(-0.05,0.05));
-    const sc=rand(0.75,1.7); dummy.scale.setScalar(sc);
+    dummy.scale.setScalar(sc);
     dummy.updateMatrix();
-    trunks.setMatrixAt(i,dummy.matrix); cans.setMatrixAt(i,dummy.matrix);
-    cTmp.setHSL(rand(0.24,0.34),rand(0.45,0.6),rand(0.28,0.4));
-    cans.setColorAt(i,cTmp);
+    trunks.setMatrixAt(i,dummy.matrix);
+    cTmp.setHSL(rand(0.07,0.1),rand(0.25,0.4),rand(0.22,0.32));
+    trunks.setColorAt(i,cTmp);
+    const baseHue=rand(0.22,0.32), baseL=rand(0.34,0.46);
+    for(let k=0;k<CARDS_PER_TREE;k++){
+      const a=rand(Math.PI*2), r=Math.pow(Math.random(),0.6);
+      const ox=Math.cos(a)*r*2.6, oz=Math.sin(a)*r*2.6, oy=rand(-1.4,1.8);
+      dummy.position.set(s[0]+ox*sc,s[1]-0.3+(6.4+oy)*sc,s[2]+oz*sc);
+      dummy.rotation.set(rand(-0.8,0.8),rand(Math.PI*2),rand(-0.8,0.8));
+      dummy.scale.setScalar(sc*rand(0.75,1.25));
+      dummy.updateMatrix();
+      cards.setMatrixAt(ci,dummy.matrix);
+      cTmp.setHSL(baseHue+rand(-0.02,0.02),rand(0.4,0.55),clamp(baseL+oy*0.045+rand(-0.03,0.03),0.2,0.55));
+      cards.setColorAt(ci,cTmp);
+      ci++;
+    }
   });
-  trunks.castShadow=cans.castShadow=true; cans.receiveShadow=true;
-  scene.add(trunks,cans);
+  bushSpots.forEach(s=>{
+    const sc=rand(0.5,1.1);
+    const baseHue=rand(0.23,0.31), baseL=rand(0.3,0.42);
+    for(let k=0;k<CARDS_PER_BUSH;k++){
+      const a=rand(Math.PI*2), r=Math.pow(Math.random(),0.7);
+      dummy.position.set(s[0]+Math.cos(a)*r*1.1*sc,s[1]+rand(0.3,0.9)*sc,s[2]+Math.sin(a)*r*1.1*sc);
+      dummy.rotation.set(rand(-0.9,0.9),rand(Math.PI*2),rand(-0.9,0.9));
+      dummy.scale.setScalar(sc*rand(0.35,0.55));
+      dummy.updateMatrix();
+      cards.setMatrixAt(ci,dummy.matrix);
+      cTmp.setHSL(baseHue+rand(-0.02,0.02),rand(0.42,0.58),baseL+rand(-0.03,0.05));
+      cards.setColorAt(ci,cTmp);
+      ci++;
+    }
+  });
+  trunks.castShadow=true;
+  cards.castShadow=true; cards.receiveShadow=true;
+  cards.customDepthMaterial=leafDepth;
+  scene.add(trunks,cards);
 }
-/* --- 針葉樹 --- */
+/* --- 針葉樹(3段コーン) --- */
 {
-  const spots=scatter(420,(x,z,h)=>h>18&&h<58&&getSlope(x,z)<0.65&&fbm(x*0.007-31,z*0.007+12,3)>-0.05);
-  const trunkGeo=new THREE.CylinderGeometry(0.22,0.4,4.5,6); trunkGeo.translate(0,2.2,0);
-  const coneGeo=new THREE.ConeGeometry(2.2,7.5,8); coneGeo.translate(0,7.0,0);
+  const spots=scatter(340,(x,z,h)=>h>18&&h<58&&getSlope(x,z)<0.65&&fbm(x*0.007-31,z*0.007+12,3)>-0.05);
+  const trunkGeo=new THREE.CylinderGeometry(0.22,0.42,5.0,6); trunkGeo.translate(0,2.5,0);
+  const coneGeo=new THREE.ConeGeometry(2.0,4.5,9);
   const trunkMat=new THREE.MeshStandardMaterial({color:0x4a3a28,roughness:0.95});
   const coneMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.9});
   const trunks=new THREE.InstancedMesh(trunkGeo,trunkMat,spots.length);
-  const cones=new THREE.InstancedMesh(coneGeo,coneMat,spots.length);
+  const cones=new THREE.InstancedMesh(coneGeo,coneMat,spots.length*3);
   spots.forEach((s,i)=>{
+    const sc=rand(0.7,1.5), sy=sc*rand(0.9,1.3);
     dummy.position.set(s[0],s[1]-0.3,s[2]);
     dummy.rotation.set(0,rand(Math.PI*2),0);
-    const sc=rand(0.7,1.5); dummy.scale.set(sc,sc*rand(0.9,1.3),sc);
+    dummy.scale.set(sc,sy,sc);
     dummy.updateMatrix();
-    trunks.setMatrixAt(i,dummy.matrix); cones.setMatrixAt(i,dummy.matrix);
-    cTmp.setHSL(rand(0.3,0.4),rand(0.35,0.5),rand(0.16,0.26));
-    cones.setColorAt(i,cTmp);
+    trunks.setMatrixAt(i,dummy.matrix);
+    const hue=rand(0.3,0.4), sat=rand(0.35,0.5), lit=rand(0.16,0.26);
+    for(let k=0;k<3;k++){
+      const w=1-(k*0.28);
+      dummy.position.set(s[0],s[1]-0.3+(4.2+k*2.4)*sy,s[2]);
+      dummy.rotation.set(0,rand(Math.PI*2),0);
+      dummy.scale.set(sc*w,sy*0.95,sc*w);
+      dummy.updateMatrix();
+      cones.setMatrixAt(i*3+k,dummy.matrix);
+      cTmp.setHSL(hue,sat,lit+k*0.02);
+      cones.setColorAt(i*3+k,cTmp);
+    }
   });
   trunks.castShadow=cones.castShadow=true; cones.receiveShadow=true;
   scene.add(trunks,cones);
@@ -487,106 +648,187 @@ function makeCanopyGeo(r){
     dummy.rotation.set(rand(Math.PI),rand(Math.PI),rand(Math.PI));
     dummy.scale.set(rand(0.4,2.6),rand(0.4,2.0),rand(0.4,2.6));
     dummy.updateMatrix(); rocks.setMatrixAt(i,dummy.matrix);
-    cTmp.setHSL(0.08,rand(0.02,0.08),rand(0.32,0.5)); rocks.setColorAt(i,cTmp);
+    cTmp.setHSL(0.08,rand(0.02,0.08),rand(0.36,0.55)); rocks.setColorAt(i,cTmp);
   });
   rocks.castShadow=rocks.receiveShadow=true;
   scene.add(rocks);
 }
-/* --- 茂み --- */
+/* --- 花畑(パッチ状に群生) --- */
 {
-  const spots=scatter(380,(x,z,h)=>h>1.6&&h<40&&getSlope(x,z)<0.5&&Math.hypot(x,z)>10);
-  const g=makeCanopyGeo(0.9);
-  const m=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95});
-  const bush=new THREE.InstancedMesh(g,m,spots.length);
-  spots.forEach((s,i)=>{
-    dummy.position.set(s[0],s[1]+0.25,s[2]);
-    dummy.rotation.set(0,rand(Math.PI*2),0);
-    dummy.scale.set(rand(0.6,1.6),rand(0.4,1.0),rand(0.6,1.6));
-    dummy.updateMatrix(); bush.setMatrixAt(i,dummy.matrix);
-    cTmp.setHSL(rand(0.22,0.33),rand(0.4,0.55),rand(0.22,0.35)); bush.setColorAt(i,cTmp);
-  });
-  bush.castShadow=true;
-  scene.add(bush);
-}
-/* --- 花 --- */
-{
-  const spots=scatter(500,(x,z,h)=>h>2&&h<32&&getSlope(x,z)<0.35);
-  const g=new THREE.CircleGeometry(0.09,5);
-  const m=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.6,side:THREE.DoubleSide,emissiveIntensity:0.2});
-  const fl=new THREE.InstancedMesh(g,m,spots.length);
-  const palette=[0xfff4f8,0xffd9e8,0xfff2b0,0xd8c8ff,0xffffff];
-  spots.forEach((s,i)=>{
-    dummy.position.set(s[0],s[1]+0.32,s[2]);
-    dummy.rotation.set(-Math.PI/2+rand(-0.5,0.5),0,rand(Math.PI*2));
-    dummy.scale.setScalar(rand(0.7,1.6));
-    dummy.updateMatrix(); fl.setMatrixAt(i,dummy.matrix);
-    cTmp.set(palette[Math.floor(rand(palette.length))]); fl.setColorAt(i,cTmp);
-  });
-  scene.add(fl);
-}
-/* --- 草(プレイヤー追従で再配置 + 風シェーダ) --- */
-const GRASS_N=12000;
-let grassMesh;
-{
-  const g=new THREE.BufferGeometry();
-  const verts=new Float32Array([-0.07,0,0, 0.07,0,0, 0,0.95,0]);
-  g.setAttribute('position',new THREE.BufferAttribute(verts,3));
-  g.computeVertexNormals();
-  const m=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.9,side:THREE.DoubleSide});
-  m.onBeforeCompile=(sh)=>{
+  const PATCHES=46, PER_PATCH=52;
+  const flowerGeo=new THREE.PlaneGeometry(0.17,0.17);
+  flowerGeo.rotateX(-Math.PI/2);
+  const flowerMat=new THREE.MeshStandardMaterial({map:texFlower,alphaTest:0.4,side:THREE.DoubleSide,roughness:0.7});
+  flowerMat.onBeforeCompile=(sh)=>{
     sh.uniforms.uTime=timeU;
     sh.vertexShader='uniform float uTime;\n'+sh.vertexShader.replace(
       '#include <begin_vertex>',
       `#include <begin_vertex>
-       float gph=instanceMatrix[3][0]*0.7+instanceMatrix[3][2]*0.7;
-       transformed.x+=sin(uTime*2.1+gph)*transformed.y*transformed.y*0.32;
-       transformed.z+=cos(uTime*1.7+gph*1.3)*transformed.y*transformed.y*0.18;`
+       float fph=instanceMatrix[3][0]*3.0+instanceMatrix[3][2]*2.3;
+       transformed.x+=sin(uTime*2.2+fph)*0.045;
+       transformed.z+=cos(uTime*1.8+fph)*0.045;`
     );
   };
-  grassMesh=new THREE.InstancedMesh(g,m,GRASS_N);
-  grassMesh.frustumCulled=false;
-  for(let i=0;i<GRASS_N;i++){
-    placeGrass(i,0,16,80);
+  const flowers=new THREE.InstancedMesh(flowerGeo,flowerMat,PATCHES*PER_PATCH);
+  const palette=[0xd84030,0x5468d8,0xe8d44d,0xf0f0f8,0xb45fd0];
+  const weights=[0.28,0.24,0.2,0.18,0.1];
+  const centers=scatter(PATCHES,(x,z,h)=>h>2&&h<34&&getSlope(x,z)<0.35&&Math.hypot(x,z)>12);
+  let fi=0;
+  centers.forEach(cn=>{
+    let r0=Math.random(),pi=0;
+    for(let w=0;w<weights.length;w++){if(r0<weights[w]){pi=w;break;}r0-=weights[w];}
+    const pr=rand(4,9);
+    for(let k=0;k<PER_PATCH;k++){
+      const a=rand(Math.PI*2), r=Math.sqrt(Math.random())*pr;
+      const x=cn[0]+Math.cos(a)*r, z=cn[2]+Math.sin(a)*r;
+      const h=getHeight(x,z);
+      dummy.position.set(x,h+rand(0.22,0.48),z);
+      dummy.rotation.set(rand(-0.4,0.4),rand(Math.PI*2),rand(-0.4,0.4));
+      dummy.scale.setScalar(rand(0.7,1.4));
+      dummy.updateMatrix();
+      flowers.setMatrixAt(fi,dummy.matrix);
+      cTmp.set(palette[pi]).offsetHSL(rand(-0.02,0.02),0,rand(-0.06,0.06));
+      flowers.setColorAt(fi,cTmp);
+      fi++;
+    }
+  });
+  scene.add(flowers);
+}
+
+/* ============================================================
+   草(曲面ブレード・風のうねり・プレイヤー追従)
+============================================================ */
+const GRASS_N=isMobile?26000:70000;
+const GRASS_R=isMobile?46:62;
+const CLUMP=8;
+let grassMesh;
+let gClumpX=0,gClumpZ=0,gClumpHue=0.25,gClumpSat=0.6,gClumpLit=0.4,gClumpOk=false;
+const grassPlayerU={value:new THREE.Vector3()};
+function makeBladeGeo(){
+  const SEGS=4,H=1.0,W=0.042,BEND=0.22;
+  const pos=[],col=[],uv=[],idx=[];
+  for(let s=0;s<SEGS;s++){
+    const t=s/SEGS;
+    const w=W*(1-t*0.82), y=t*H, z=BEND*t*t;
+    pos.push(-w,y,z, w,y,z);
+    const c=0.42+0.85*t;
+    col.push(c*0.92,c,c*0.72, c*0.92,c,c*0.72);
+    uv.push(0,t, 1,t);
   }
+  pos.push(0,H,BEND);
+  const cT=1.3; col.push(cT*0.95,cT,cT*0.7);
+  uv.push(0.5,1);
+  for(let s=0;s<SEGS-1;s++){
+    const b=s*2;
+    idx.push(b,b+1,b+2, b+1,b+3,b+2);
+  }
+  const last=(SEGS-1)*2;
+  idx.push(last,last+1,SEGS*2);
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+  g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+{
+  const m=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.85,side:THREE.DoubleSide});
+  m.onBeforeCompile=(sh)=>{
+    sh.uniforms.uTime=timeU;
+    sh.uniforms.uPlayer=grassPlayerU;
+    sh.vertexShader='uniform float uTime;\nuniform vec3 uPlayer;\n'+sh.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+       vec3 gip=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);
+       float gdf=1.0-smoothstep(${(GRASS_R-12).toFixed(1)},${(GRASS_R+2).toFixed(1)},distance(gip.xz,uPlayer.xz));
+       transformed*=gdf;
+       float gk=transformed.y*transformed.y;
+       float gph=gip.x*0.35+gip.z*0.28;
+       float gwave=sin(dot(gip.xz,vec2(0.18,0.14))-uTime*1.7);
+       float ggust=gwave*(0.55+0.45*sin(uTime*0.41+gph*1.7));
+       transformed.x+=(ggust*0.30+sin(uTime*2.6+gph*7.3)*0.055)*gk;
+       transformed.z+=(cos(uTime*1.9+gph*5.1)*0.07+ggust*0.13)*gk;`
+    );
+  };
+  grassMesh=new THREE.InstancedMesh(makeBladeGeo(),m,GRASS_N);
+  grassMesh.frustumCulled=false;
+  grassMesh.receiveShadow=true;
+  for(let i=0;i<GRASS_N;i++)placeGrass(i,0,16,GRASS_R);
   grassMesh.instanceMatrix.needsUpdate=true;
   if(grassMesh.instanceColor)grassMesh.instanceColor.needsUpdate=true;
   scene.add(grassMesh);
 }
 function placeGrass(i,cx,cz,radius){
-  for(let t=0;t<6;t++){
-    const a=rand(Math.PI*2), r=Math.sqrt(Math.random())*radius;
-    const x=cx+Math.cos(a)*r, z=cz+Math.sin(a)*r;
-    const h=getHeight(x,z);
-    if(h>1.5&&h<44&&getSlope(x,z)<0.55){
-      dummy.position.set(x,h,z);
-      dummy.rotation.set(rand(-0.15,0.15),rand(Math.PI*2),rand(-0.15,0.15));
-      dummy.scale.setScalar(rand(0.6,1.7));
-      dummy.updateMatrix();
-      grassMesh.setMatrixAt(i,dummy.matrix);
-      cTmp.setHSL(rand(0.23,0.32),rand(0.45,0.65),rand(0.3,0.45));
-      grassMesh.setColorAt(i,cTmp);
-      return true;
+  if(i%CLUMP===0){
+    gClumpOk=false;
+    for(let t=0;t<6;t++){
+      const a=rand(Math.PI*2), r=Math.sqrt(Math.random())*radius;
+      const x=cx+Math.cos(a)*r, z=cz+Math.sin(a)*r;
+      const h=getHeight(x,z);
+      if(h>1.0&&h<46&&getSlope(x,z)<0.78){
+        gClumpX=x; gClumpZ=z; gClumpOk=true;
+        const md=meadowNoise(x,z);
+        gClumpHue=lerp(rand(0.24,0.30),rand(0.16,0.21),md)+rand(-0.012,0.012);
+        gClumpSat=rand(0.5,0.72);
+        gClumpLit=lerp(rand(0.32,0.42),rand(0.42,0.52),md);
+        break;
+      }
     }
   }
-  return false;
+  if(!gClumpOk){
+    dummy.position.set(0,-100,0); dummy.scale.setScalar(0.001);
+    dummy.updateMatrix(); grassMesh.setMatrixAt(i,dummy.matrix);
+    return;
+  }
+  const a=rand(Math.PI*2), r=Math.sqrt(Math.random())*0.55;
+  const x=gClumpX+Math.cos(a)*r, z=gClumpZ+Math.sin(a)*r;
+  dummy.position.set(x,getHeight(x,z)-0.04,z);
+  dummy.rotation.set(rand(-0.12,0.12),rand(Math.PI*2),rand(-0.12,0.12));
+  dummy.scale.set(rand(0.85,1.5),rand(0.55,1.3),rand(0.85,1.5));
+  dummy.updateMatrix();
+  grassMesh.setMatrixAt(i,dummy.matrix);
+  cTmp.setHSL(gClumpHue+rand(-0.015,0.015),gClumpSat+rand(-0.08,0.08),gClumpLit+rand(-0.05,0.06));
+  grassMesh.setColorAt(i,cTmp);
 }
 
 /* ============================================================
-   大樹の祠(スポーン地点ランドマーク)
+   大樹の祠
 ============================================================ */
+function makeCanopyGeo(r){
+  const g=new THREE.IcosahedronGeometry(r,1);
+  const p=g.attributes.position;
+  for(let i=0;i<p.count;i++){
+    const v=new THREE.Vector3().fromBufferAttribute(p,i);
+    const s=1+0.28*Simplex(v.x*0.9+3,v.y*0.9+v.z*0.7);
+    v.multiplyScalar(s); p.setXYZ(i,v.x,v.y*1.15,v.z);
+  }
+  g.computeVertexNormals(); return g;
+}
 const shrine=new THREE.Group();
 {
-  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(1.6,2.6,14,10),
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(1.6,2.8,15,10),
     new THREE.MeshStandardMaterial({color:0x6a5138,roughness:0.9}));
-  trunk.position.y=7; trunk.castShadow=true; shrine.add(trunk);
-  const can=new THREE.Mesh(makeCanopyGeo(7.5),
-    new THREE.MeshStandardMaterial({color:0x4a7a3a,roughness:0.85,emissive:0x1a3a1c,emissiveIntensity:0.5}));
-  can.position.y=19; can.castShadow=true; shrine.add(can);
-  // 石環
+  trunk.position.y=7.5; trunk.castShadow=true; shrine.add(trunk);
+  // 大樹の葉カード
+  const bigCards=new THREE.InstancedMesh(new THREE.PlaneGeometry(7,7),leafMat,42);
+  bigCards.customDepthMaterial=leafDepth;
+  for(let k=0;k<42;k++){
+    const a=rand(Math.PI*2), r=Math.pow(Math.random(),0.55);
+    dummy.position.set(Math.cos(a)*r*6.5,19+rand(-3,3.5),Math.sin(a)*r*6.5);
+    dummy.rotation.set(rand(-0.9,0.9),rand(Math.PI*2),rand(-0.9,0.9));
+    dummy.scale.setScalar(rand(0.7,1.3));
+    dummy.updateMatrix();
+    bigCards.setMatrixAt(k,dummy.matrix);
+    cTmp.setHSL(rand(0.24,0.3),rand(0.42,0.55),0.3+dummy.position.y*0.008+rand(-0.03,0.03));
+    bigCards.setColorAt(k,cTmp);
+  }
+  bigCards.castShadow=true;
+  shrine.add(bigCards);
   for(let i=0;i<8;i++){
     const a=i/8*Math.PI*2;
     const st=new THREE.Mesh(new THREE.BoxGeometry(1.1,rand(1.8,2.8),0.8),
-      new THREE.MeshStandardMaterial({color:0x8a8a92,roughness:0.85}));
+      new THREE.MeshStandardMaterial({color:0x9a9aa2,roughness:0.85}));
     st.position.set(Math.cos(a)*9,1.0,Math.sin(a)*9);
     st.rotation.y=-a; st.castShadow=true; shrine.add(st);
   }
@@ -597,20 +839,20 @@ const shrine=new THREE.Group();
 }
 
 /* ============================================================
-   蛍(夜のパーティクル)
+   蛍
 ============================================================ */
-let fireflies, ffSeeds;
+let fireflies;
 {
   const N=260;
-  const pos=new Float32Array(N*3); ffSeeds=new Float32Array(N);
+  const pos=new Float32Array(N*3); const seeds=new Float32Array(N);
   for(let i=0;i<N;i++){
     pos[i*3]=rand(-120,120); pos[i*3+2]=rand(-120,120);
     pos[i*3+1]=getHeight(pos[i*3],pos[i*3+2])+rand(0.5,4);
-    ffSeeds[i]=rand(100);
+    seeds[i]=rand(100);
   }
   const g=new THREE.BufferGeometry();
   g.setAttribute('position',new THREE.BufferAttribute(pos,3));
-  g.setAttribute('seed',new THREE.BufferAttribute(ffSeeds,1));
+  g.setAttribute('seed',new THREE.BufferAttribute(seeds,1));
   const m=new THREE.ShaderMaterial({
     transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
     uniforms:{uTime:timeU,uNight:{value:0}},
@@ -639,26 +881,12 @@ let fireflies, ffSeeds;
 }
 
 /* ============================================================
-   テクスチャ生成(グロー用)
-============================================================ */
-function glowTexture(inner='rgba(255,255,255,1)',outer='rgba(255,255,255,0)'){
-  const cv=document.createElement('canvas'); cv.width=cv.height=64;
-  const ctx=cv.getContext('2d');
-  const gr=ctx.createRadialGradient(32,32,2,32,32,30);
-  gr.addColorStop(0,inner); gr.addColorStop(1,outer);
-  ctx.fillStyle=gr; ctx.fillRect(0,0,64,64);
-  const tx=new THREE.CanvasTexture(cv); tx.colorSpace=THREE.SRGBColorSpace;
-  return tx;
-}
-const texGlow=glowTexture();
-
-/* ============================================================
    プレイヤー(魔導士)
 ============================================================ */
 const player={
   pos:new THREE.Vector3(0,getHeight(0,16),16),
   yawFace:0, hp:100, maxHp:100, mp:100, maxMp:100,
-  lv:1, xp:0, atk:26, atkBonus:0,
+  lv:1, xp:0, atk:26,
   invuln:0, dead:false, walkCycle:0, moving:false,
 };
 const xpNeed=l=>Math.round(50*Math.pow(l,1.35));
@@ -674,14 +902,12 @@ const pGroup=new THREE.Group();
   head.position.y=1.85; head.castShadow=true; pGroup.add(head);
   const hood=new THREE.Mesh(new THREE.ConeGeometry(0.32,0.55,10),cloth);
   hood.position.y=2.1; hood.castShadow=true; pGroup.add(hood);
-  // 腕
   player.armL=new THREE.Group(); player.armL.position.set(0.42,1.5,0);
   const aL=new THREE.Mesh(new THREE.CapsuleGeometry(0.09,0.5,3,8),cloth);
   aL.position.y=-0.3; player.armL.add(aL); pGroup.add(player.armL);
   player.armR=new THREE.Group(); player.armR.position.set(-0.42,1.5,0);
   const aR=new THREE.Mesh(new THREE.CapsuleGeometry(0.09,0.5,3,8),cloth);
   aR.position.y=-0.3; player.armR.add(aR); pGroup.add(player.armR);
-  // 杖
   const staff=new THREE.Group();
   const rod=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.055,1.9,6),
     new THREE.MeshStandardMaterial({color:0x6a4a2a,roughness:0.85}));
@@ -704,14 +930,13 @@ scene.add(pGroup);
 const cam={yaw:0, pitch:0.32, dist:7.5};
 
 /* ============================================================
-   サウンド(WebAudio 手続き生成)
+   サウンド
 ============================================================ */
 let AC=null, masterGain=null, soundOn=true;
 function initAudio(){
   if(AC)return;
   AC=new (window.AudioContext||window.webkitAudioContext)();
-  masterGain=AC.createGain(); masterGain.gain.value=0.5; masterGain.connect(AC.destination);
-  // 風
+  masterGain=AC.createGain(); masterGain.gain.value=soundOn?0.5:0; masterGain.connect(AC.destination);
   const len=AC.sampleRate*2;
   const buf=AC.createBuffer(1,len,AC.sampleRate);
   const d=buf.getChannelData(0);
@@ -780,7 +1005,7 @@ function updateHud(){
 }
 
 /* ============================================================
-   クリスタル(クエスト対象)
+   クリスタル
 ============================================================ */
 const crystals=[];
 const CRYSTAL_TOTAL=7;
@@ -878,7 +1103,6 @@ let atkCd=0;
 function fireBolt(){
   if(player.dead||atkCd>0||player.mp<14)return;
   atkCd=0.35; player.mp-=14;
-  // 発射方向: 最寄りの敵(前方60度以内・35m)へ、いなければ正面
   const fwd=new THREE.Vector3(Math.sin(player.yawFace),0,Math.cos(player.yawFace));
   let dir=fwd.clone(), best=1e9, target=null;
   enemies.forEach(e=>{
@@ -897,7 +1121,6 @@ function fireBolt(){
   mesh.position.copy(start);
   scene.add(mesh);
   bolts.push({mesh,vel:dir.multiplyScalar(42),life:1.6,target});
-  // 腕振りアニメ
   player.armL.rotation.x=-2.0;
   sfx.bolt();
   updateHud();
@@ -931,6 +1154,61 @@ function dropOrb(pos){
 }
 
 /* ============================================================
+   セーブ / ロード
+============================================================ */
+const SAVE_KEY='alveria_save_v1';
+let saveTimer=0;
+function saveGame(){
+  try{
+    localStorage.setItem(SAVE_KEY,JSON.stringify({
+      v:1, lv:player.lv, xp:player.xp, maxHp:player.maxHp, hp:Math.ceil(player.hp),
+      mp:Math.floor(player.mp), atk:player.atk,
+      px:Math.round(player.pos.x*10)/10, pz:Math.round(player.pos.z*10)/10,
+      yaw:Math.round(player.yawFace*100)/100, camYaw:Math.round(cam.yaw*100)/100,
+      cry:crystals.map(c=>c.taken?1:0), questDone,
+      dayTime:Math.round(dayTime*10)/10, snd:soundOn,
+    }));
+    showSaveInd();
+  }catch(e){}
+}
+function readSave(){
+  try{
+    const s=JSON.parse(localStorage.getItem(SAVE_KEY));
+    if(s&&s.v===1)return s;
+  }catch(e){}
+  return null;
+}
+function applySave(s){
+  player.lv=s.lv; player.xp=s.xp; player.maxHp=s.maxHp; player.hp=s.hp;
+  player.mp=s.mp; player.atk=s.atk;
+  player.pos.set(s.px,getHeight(s.px,s.pz),s.pz);
+  player.yawFace=s.yaw; cam.yaw=s.camYaw;
+  dayTime=s.dayTime%DAY_LEN;
+  soundOn=s.snd!==false;
+  $('sndBtn').textContent=soundOn?'🔊':'🔇';
+  crystalsGot=0;
+  s.cry.forEach((t,i)=>{
+    if(t&&crystals[i]){crystals[i].taken=true;crystals[i].grp.visible=false;crystalsGot++;}
+  });
+  questDone=!!s.questDone;
+  $('crystalCnt').textContent=crystalsGot+' / '+CRYSTAL_TOTAL;
+  if(questDone){
+    $('questText').innerHTML='<span style="color:#ffd97a">クエスト完了!</span><br>森に祝福が戻った';
+    $('questDist').style.display='none';
+  }
+  updateHud();
+}
+let saveIndTimer=null;
+function showSaveInd(){
+  const el=$('saveInd');
+  el.style.opacity=1;
+  clearTimeout(saveIndTimer);
+  saveIndTimer=setTimeout(()=>el.style.opacity=0,1400);
+}
+addEventListener('beforeunload',()=>{if(started)saveGame();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&started)saveGame();});
+
+/* ============================================================
    入力
 ============================================================ */
 const keys={};
@@ -954,7 +1232,6 @@ addEventListener('mouseup',()=>mouseDrag=false);
 canvas.addEventListener('wheel',e=>{cam.dist=clamp(cam.dist+e.deltaY*0.01,4,16);},{passive:true});
 canvas.addEventListener('click',()=>{if(dragDist<8)fireBolt();});
 
-/* タッチ: 左=ジョイスティック, 右=カメラ */
 const joyState={active:false,id:null,ox:0,oy:0,dx:0,dy:0};
 const camTouch={id:null,lx:0,ly:0};
 const joyEl=$('joy'), knob=$('joyKnob');
@@ -1005,6 +1282,7 @@ addEventListener('resize',()=>{
   camera.aspect=innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
+  composer.setSize(innerWidth,innerHeight);
 });
 
 /* ============================================================
@@ -1012,17 +1290,20 @@ addEventListener('resize',()=>{
 ============================================================ */
 function gainXp(n){
   player.xp+=n;
+  let leveled=false;
   while(player.xp>=xpNeed(player.lv)){
     player.xp-=xpNeed(player.lv);
     player.lv++;
     player.maxHp+=15; player.hp=player.maxHp;
     player.atk+=4; player.mp=player.maxMp;
+    leveled=true;
     $('lvup').classList.remove('show'); void $('lvup').offsetWidth;
     $('lvup').classList.add('show');
     burst(player.pos.clone().add(new THREE.Vector3(0,1.5,0)),0xffd97a,40,9);
     sfx.lvup();
     toast('レベル '+player.lv+' に上がった! 攻撃力と最大HPが上昇');
   }
+  if(leveled)saveGame();
   updateHud();
 }
 function hurtPlayer(dmg){
@@ -1039,7 +1320,7 @@ function hurtPlayer(dmg){
       player.pos.set(0,getHeight(0,16),16);
       player.hp=player.maxHp; player.mp=player.maxMp;
       player.dead=false; player.invuln=2;
-      updateHud();
+      updateHud(); saveGame();
     },2400);
   }
   updateHud();
@@ -1062,22 +1343,23 @@ function collectCrystal(c){
       player.atk+=10; player.maxHp+=50; player.hp=player.maxHp;
       burst(shrine.position.clone().add(new THREE.Vector3(0,10,0)),0xaaffcc,60,14);
       sfx.bless();
-      updateHud();
+      updateHud(); saveGame();
     },2000);
   }else{
     toast('精霊のクリスタルを手に入れた('+crystalsGot+' / '+CRYSTAL_TOTAL+')');
   }
+  saveGame();
 }
 
 /* ============================================================
    昼夜サイクル
 ============================================================ */
-const DAY_LEN=150;             // 秒/1日
-let dayTime=DAY_LEN*0.35;      // 朝からスタート
+const DAY_LEN=150;
+let dayTime=DAY_LEN*0.35;
 const sunDir=new THREE.Vector3();
-const fogDay=new THREE.Color(0xa9c8dd), fogNight=new THREE.Color(0x0a1018), fogDusk=new THREE.Color(0xd89a6a);
+const fogDay=new THREE.Color(0xbcd0de), fogNight=new THREE.Color(0x0a1018), fogDusk=new THREE.Color(0xd89a6a);
 const fogCur=new THREE.Color();
-const skyHorDay=new THREE.Color(0xa3c8dd), skyHorNight=new THREE.Color(0x0d1420);
+const skyHorDay=new THREE.Color(0xaecadd), skyHorNight=new THREE.Color(0x0d1420);
 function updateDayNight(dt){
   dayTime=(dayTime+dt)%DAY_LEN;
   const a=dayTime/DAY_LEN*Math.PI*2-Math.PI/2;
@@ -1087,7 +1369,6 @@ function updateDayNight(dt){
   const dayF=smoothstep(-0.09,0.22,sunDir.y);
   const nightF=smoothstep(0.05,-0.15,sunDir.y);
   const duskF=(1-smoothstep(0.10,0.42,Math.abs(sunDir.y)));
-  // 太陽 or 月
   if(sunDir.y>-0.05){
     sun.position.copy(player.pos).addScaledVector(sunDir,140);
     sun.color.setHex(0xfff2dd).lerp(new THREE.Color(0xff8040),duskF*0.7);
@@ -1103,7 +1384,7 @@ function updateDayNight(dt){
   scene.fog.color.copy(fogCur);
   waterUniforms.uSkyCol.value.copy(skyHorNight).lerp(skyHorDay,dayF);
   fireflies.material.uniforms.uNight.value=nightF;
-  // UI
+  bloom.strength=0.32+nightF*0.25;
   const hrs=Math.floor(dayTime/DAY_LEN*24), min=Math.floor((dayTime/DAY_LEN*24%1)*60);
   $('clockTxt').textContent=String(hrs).padStart(2,'0')+':'+String(min).padStart(2,'0');
   $('dayIcon').textContent=nightF>0.5?'🌙':(duskF>0.5?'🌇':'☀️');
@@ -1122,7 +1403,7 @@ function tick(){
   requestAnimationFrame(tick);
   const dt=Math.min(clock.getDelta(),0.05);
   timeU.value+=dt;
-  if(!started){renderer.render(scene,camera);return;}
+  if(!started){composer.render();return;}
 
   const nightF=updateDayNight(dt);
 
@@ -1153,13 +1434,17 @@ function tick(){
     player.yawFace+=dy*Math.min(dt*12,1);
     player.walkCycle+=dt*9;
   }else{
-    player.pos.y=Math.max(getHeight(player.pos.x,player.pos.z),WATER_Y-1.2);
+    player.pos.y=Math.max(getHeight(player.pos.x,player.pos.z),WATER_Y-1.25);
   }
   player.invuln=Math.max(0,player.invuln-dt);
   atkCd=Math.max(0,atkCd-dt);
   $('atkBtn').classList.toggle('cd',atkCd>0||player.mp<14);
   player.mp=Math.min(player.maxMp,player.mp+8*dt);
   if(Math.floor(timeU.value*4)!==Math.floor((timeU.value-dt)*4))updateHud();
+
+  /* --- 自動セーブ --- */
+  saveTimer+=dt;
+  if(saveTimer>12){saveTimer=0;saveGame();}
 
   /* --- プレイヤーアニメ --- */
   pGroup.position.copy(player.pos);
@@ -1183,14 +1468,16 @@ function tick(){
   camera.lookAt(v3a);
   waterUniforms.uCamPos.value.copy(camera.position);
   sky.position.copy(camera.position);
+  grassPlayerU.value.copy(player.pos);
 
-  /* --- 草の再配置(プレイヤー追従) --- */
-  for(let n=0;n<120;n++){
+  /* --- 草の再配置 --- */
+  const RESCATTER=isMobile?150:280;
+  for(let n=0;n<RESCATTER;n++){
     const i=grassCursor; grassCursor=(grassCursor+1)%GRASS_N;
     grassMesh.getMatrixAt(i,dummy.matrix);
     const gx=dummy.matrix.elements[12], gz=dummy.matrix.elements[14];
-    if(Math.hypot(gx-player.pos.x,gz-player.pos.z)>95){
-      placeGrass(i,player.pos.x,player.pos.z,80);
+    if(Math.hypot(gx-player.pos.x,gz-player.pos.z)>GRASS_R+6){
+      placeGrass(i,player.pos.x,player.pos.z,GRASS_R-2);
     }
   }
   grassMesh.instanceMatrix.needsUpdate=true;
@@ -1246,13 +1533,11 @@ function tick(){
       const hitR=e.type==='wisp'?1.7:2.3;
       if(d<hitR&&e.atkCd<=0){e.atkCd=1.1;hurtPlayer(e.dmg);}
     }else{
-      // 徘徊
       e.grp.position.y=(e.type==='wisp')
         ?getHeight(e.grp.position.x,e.grp.position.z)+2.2+Math.sin(timeU.value*3+e.bobSeed)*0.4
         :getHeight(e.grp.position.x,e.grp.position.z);
     }
     if(e.type==='wisp')e.core.material.emissiveIntensity=2.0+Math.sin(timeU.value*5+e.bobSeed)*0.8;
-    // HPバー
     if(e.hp<e.maxHp&&e.hp>0){
       e.hpBar.visible=true;
       e.hpBar.userData.fg.scale.x=Math.max(e.hp,0)/e.maxHp;
@@ -1265,7 +1550,6 @@ function tick(){
   for(let i=bolts.length-1;i>=0;i--){
     const b=bolts[i];
     b.life-=dt;
-    // 追尾
     if(b.target&&!b.target.dead){
       v3a.copy(b.target.grp.position).sub(b.mesh.position);
       if(b.target.type==='golem')v3a.y+=1.4;
@@ -1370,7 +1654,7 @@ function tick(){
     if(nightF<0.4&&soundOn&&AC)sfx.chirp();
   }
 
-  renderer.render(scene,camera);
+  composer.render();
 }
 
 /* ============================================================
@@ -1379,16 +1663,30 @@ function tick(){
 loadingEl.style.display='none';
 updateHud();
 $('crystalCnt').textContent='0 / '+CRYSTAL_TOTAL;
-window.__dbg={player,enemies,crystals,cam,fireBolt,setTime:t=>{dayTime=t*DAY_LEN;},getState:()=>({hp:player.hp,mp:player.mp,lv:player.lv,xp:player.xp,got:crystalsGot,enemies:enemies.map(e=>({t:e.type,hp:e.hp,dead:e.dead,x:Math.round(e.grp.position.x),z:Math.round(e.grp.position.z)}))})};
-$('startBtn').addEventListener('click',()=>{
+const existingSave=readSave();
+if(existingSave){
+  $('contBtn').style.display='inline-block';
+}
+function beginGame(loadSave){
+  if(loadSave&&existingSave)applySave(existingSave);
   initAudio();
   if(AC&&AC.state==='suspended')AC.resume();
   $('title').style.transition='opacity 1.2s';
   $('title').style.opacity=0;
   setTimeout(()=>$('title').remove(),1250);
   started=true;
-  toast('大樹の祠より旅立て — 光の柱がクリスタルの在り処を示す');
+  toast(loadSave&&existingSave?'旅の続きへ — おかえりなさい':'大樹の祠より旅立て — 光の柱がクリスタルの在り処を示す');
+}
+$('contBtn').addEventListener('click',()=>beginGame(true));
+$('startBtn').addEventListener('click',()=>{
+  if(existingSave&&!confirm('セーブデータを消して最初からはじめますか?'))return;
+  try{localStorage.removeItem(SAVE_KEY);}catch(e){}
+  beginGame(false);
 });
+window.__dbg={player,enemies,crystals,cam,fireBolt,saveGame,
+  setTime:t=>{dayTime=t*DAY_LEN;},
+  getState:()=>({hp:player.hp,mp:player.mp,lv:player.lv,xp:player.xp,got:crystalsGot,
+    enemies:enemies.map(e=>({t:e.type,hp:e.hp,dead:e.dead,x:Math.round(e.grp.position.x),z:Math.round(e.grp.position.z)}))})};
 tick();
 </script>
 </body>
