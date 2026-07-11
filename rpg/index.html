@@ -232,8 +232,8 @@ renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.12;
 
 const scene=new THREE.Scene();
-scene.fog=new THREE.FogExp2(0xbcd0de,0.00095);
-const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,3000);
+scene.fog=new THREE.FogExp2(0xc4d5e2,0.0009);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,3000);
 
 const composerRT=new THREE.WebGLRenderTarget(2,2,{type:THREE.HalfFloatType,samples:isMobile?2:4});
 const composer=new EffectComposer(renderer,composerRT);
@@ -247,16 +247,21 @@ composer.addPass(new OutputPass());
 const timeU={value:0};
 
 /* --- ライティング --- */
-const hemi=new THREE.HemisphereLight(0xcfe0f5,0x687a52,0.55);
+const hemi=new THREE.HemisphereLight(0xcfe0f5,0x687a52,0.5);
 scene.add(hemi);
-const sun=new THREE.DirectionalLight(0xfff2dd,2.2);
+const sun=new THREE.DirectionalLight(0xfff2dd,2.6);
 sun.castShadow=true;
-sun.shadow.mapSize.set(isMobile?1024:2048,isMobile?1024:2048);
+sun.shadow.mapSize.set(isMobile?1024:4096,isMobile?1024:4096);
 sun.shadow.camera.near=1; sun.shadow.camera.far=420;
-sun.shadow.camera.left=-95; sun.shadow.camera.right=95;
-sun.shadow.camera.top=95; sun.shadow.camera.bottom=-95;
-sun.shadow.bias=-0.0004;
+sun.shadow.camera.left=-80; sun.shadow.camera.right=80;
+sun.shadow.camera.top=80; sun.shadow.camera.bottom=-80;
+sun.shadow.bias=-0.0003;
+sun.shadow.normalBias=0.02;
 scene.add(sun); scene.add(sun.target);
+// 太陽グレア(山に隠れると消える)
+const sunGlare=new THREE.Sprite(new THREE.SpriteMaterial({color:0xfff2d0,transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending}));
+sunGlare.scale.setScalar(260);
+scene.add(sunGlare);
 
 /* ============================================================
    空(昼夜・夕焼け・雲・星・太陽・月・地平の霞)
@@ -337,22 +342,18 @@ terrainGeo.rotateX(-Math.PI/2);
 {
   const pos=terrainGeo.attributes.position;
   const colors=new Float32Array(pos.count*3);
-  const cSand=new THREE.Color(0xb0a06b), cGrass1=new THREE.Color(0x4a7a2c), cGrass2=new THREE.Color(0x77a844),
-        cMeadow=new THREE.Color(0x9ab54e),
-        cRock=new THREE.Color(0x8a857c), cSnow=new THREE.Color(0xeef2f5), cDirt=new THREE.Color(0x6b5a3c);
   const tmp=new THREE.Color();
   for(let i=0;i<pos.count;i++){
     const x=pos.getX(i), z=pos.getZ(i);
     const h=getHeight(x,z);
     pos.setY(i,h);
-    const sl=getSlope(x,z);
-    const jitter=fbm(x*0.05,z*0.05,3)*0.5;
-    tmp.copy(cGrass1).lerp(cGrass2,clamp((fbm(x*0.02+9,z*0.02-4,3)+1)*0.5+jitter*0.3,0,1));
-    tmp.lerp(cMeadow,meadowNoise(x,z)*0.55);
-    if(h<1.4+jitter) tmp.lerp(cSand,smoothstep(1.4+jitter,-0.5,h));
-    if(sl>0.62) tmp.lerp(cDirt,smoothstep(0.62,0.9,sl));
-    if(sl>0.8||h>44) tmp.lerp(cRock,Math.max(smoothstep(0.8,1.15,sl),smoothstep(44,52,h)));
-    if(h>62+jitter*6) tmp.lerp(cSnow,smoothstep(62,72,h));
+    // 頂点カラー = 草の色調(黄緑の草原ノイズ) × 谷の環境光遮蔽
+    const md=meadowNoise(x,z);
+    const hueJ=fbm(x*0.02+9,z*0.02-4,3)*0.02;
+    tmp.setHSL(lerp(0.27,0.20,md)+hueJ,0.33+0.22*md,0.5+fbm(x*0.05,z*0.05,3)*0.04);
+    const avg=(getHeight(x+6,z)+getHeight(x-6,z)+getHeight(x,z+6)+getHeight(x,z-6))*0.25;
+    const ao=clamp(1-(avg-h)*0.05,0.62,1.06);
+    tmp.multiplyScalar(ao);
     colors[i*3]=tmp.r; colors[i*3+1]=tmp.g; colors[i*3+2]=tmp.b;
   }
   terrainGeo.setAttribute('color',new THREE.BufferAttribute(colors,3));
@@ -364,26 +365,52 @@ const GLSL_NOISE=`
     return mix(mix(thash(i),thash(i+vec2(1,0)),f.x),mix(thash(i+vec2(0,1)),thash(i+vec2(1,1)),f.x),f.y);}
   float tfbm(vec2 p){float v=0.,a=.5;for(int i=0;i<4;i++){v+=a*tnoise(p);p*=2.13;a*=.5;}return v;}
 `;
+const cloudU={value:0.85};
 const terrainMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.95,metalness:0});
 terrainMat.onBeforeCompile=(sh)=>{
+  sh.uniforms.uTime=timeU;
+  sh.uniforms.uCloudAmt=cloudU;
+  sh.uniforms.uGrassTex={value:texGround};
+  sh.uniforms.uRockTex={value:texRock};
   sh.vertexShader='varying vec3 vWPos;\nvarying vec3 vNormW;\n'+sh.vertexShader.replace(
     '#include <begin_vertex>',
     `#include <begin_vertex>
      vWPos=(modelMatrix*vec4(transformed,1.0)).xyz;
      vNormW=normalize(mat3(modelMatrix)*normal);`
   );
-  sh.fragmentShader='varying vec3 vWPos;\nvarying vec3 vNormW;\n'+GLSL_NOISE+sh.fragmentShader.replace(
+  sh.fragmentShader=('varying vec3 vWPos;\nvarying vec3 vNormW;\n'
+    +'uniform float uTime;\nuniform float uCloudAmt;\n'
+    +'uniform sampler2D uGrassTex;\nuniform sampler2D uRockTex;\n'
+    +GLSL_NOISE)+sh.fragmentShader.replace(
     '#include <color_fragment>',
     `#include <color_fragment>
-     float dLarge=tfbm(vWPos.xz*0.055);
-     float dMid=tfbm(vWPos.xz*0.5);
-     float dFine=tnoise(vWPos.xz*5.5);
-     diffuseColor.rgb*=0.80+0.24*dLarge+0.16*dMid+0.10*dFine;
-     float rockM=1.0-smoothstep(0.55,0.8,vNormW.y);
-     float strata=0.8+0.2*sin(vWPos.y*1.3+tfbm(vWPos.xz*0.22)*5.0);
-     vec3 rockCol=vec3(0.46,0.44,0.41)*strata*(0.7+0.5*dMid);
-     rockCol=mix(rockCol,vec3(0.35,0.44,0.28),smoothstep(0.5,0.9,tfbm(vWPos.xz*0.14+7.0))*0.45); // 苔
-     diffuseColor.rgb=mix(diffuseColor.rgb,rockCol,rockM*0.8);`
+     vec3 tintT=diffuseColor.rgb*2.0;
+     float aoT=clamp(dot(tintT,vec3(0.333)),0.55,1.15);
+     vec2 wxz=vWPos.xz;
+     // 草地: 実テクスチャ 2スケール合成
+     vec3 gtex=texture2D(uGrassTex,wxz*0.16).rgb;
+     vec3 gmac=texture2D(uGrassTex,wxz*0.021+0.13).rgb;
+     vec3 alb=gtex*mix(vec3(1.0),gmac*2.1,0.55)*tintT*1.35;
+     // 岩肌: 2軸トライプラナー + 地層 + 苔
+     float slope=1.0-vNormW.y;
+     float aX=abs(vNormW.x),aZ=abs(vNormW.z);
+     vec3 rtex=mix(texture2D(uRockTex,vWPos.zy*0.11).rgb,texture2D(uRockTex,vWPos.xy*0.11).rgb,aX/(aX+aZ+0.001));
+     float strata=0.85+0.15*sin(vWPos.y*1.3+tfbm(wxz*0.22)*5.0);
+     vec3 rockAlb=rtex*strata*aoT;
+     rockAlb=mix(rockAlb,rockAlb*vec3(0.72,0.95,0.55),smoothstep(0.5,0.9,tfbm(wxz*0.14+7.0))*0.5);
+     float rockM=smoothstep(0.30,0.46,slope);
+     float dFine=tnoise(wxz*5.5);
+     vec3 sandAlb=vec3(0.70,0.63,0.45)*(0.8+0.3*dFine)*aoT;
+     float sandM=smoothstep(1.7,0.3,vWPos.y)*(1.0-rockM);
+     vec3 snowAlb=vec3(0.92,0.95,0.99)*(0.85+0.18*dFine);
+     float snowM=smoothstep(58.0,68.0,vWPos.y)*smoothstep(0.55,0.25,slope);
+     alb=mix(alb,sandAlb,sandM);
+     alb=mix(alb,rockAlb,rockM);
+     alb=mix(alb,snowAlb,snowM);
+     // 流れる雲の影
+     float ccs=tfbm(wxz*0.012+vec2(uTime*0.013,uTime*0.007));
+     alb*=mix(1.0,0.72+0.28*smoothstep(0.35,0.65,ccs),uCloudAmt);
+     diffuseColor.rgb=alb;`
   );
 };
 const terrain=new THREE.Mesh(terrainGeo,terrainMat);
@@ -470,27 +497,168 @@ function glowTexture(){
   return tx;
 }
 const texGlow=glowTexture();
+sunGlare.material.map=texGlow;
+sunGlare.material.needsUpdate=true;
 
 function leafTexture(){
-  const cv=document.createElement('canvas'); cv.width=cv.height=128;
+  const cv=document.createElement('canvas'); cv.width=cv.height=256;
   const ctx=cv.getContext('2d');
-  const shades=['#cdd9b0','#bccf9e','#dbe6c2','#b2c896','#c6d6a8'];
-  for(let i=0;i<90;i++){
-    const a=rand(Math.PI*2), r=Math.sqrt(Math.random())*52;
-    const x=64+Math.cos(a)*r, y=64+Math.sin(a)*r;
+  const shades=['#c8d6a8','#b8cc98','#d6e2ba','#aec28e','#c0d2a0','#d0dcb2'];
+  for(let i=0;i<230;i++){
+    const a=rand(Math.PI*2), r=Math.pow(Math.random(),0.7)*112;
+    const x=128+Math.cos(a)*r, y=128+Math.sin(a)*r;
     ctx.save();
     ctx.translate(x,y); ctx.rotate(rand(Math.PI*2));
+    const len=rand(5,8.5), wid=rand(2.2,3.6);
     ctx.fillStyle=shades[Math.floor(rand(shades.length))];
     ctx.globalAlpha=rand(0.85,1);
     ctx.beginPath();
-    ctx.ellipse(0,0,rand(5,9),rand(2.6,4.2),0,0,Math.PI*2);
+    ctx.ellipse(0,0,len,wid,0,0,Math.PI*2);
     ctx.fill();
+    // 葉脈 & 陰影
+    ctx.globalAlpha=0.3;
+    ctx.strokeStyle='#7a9060';
+    ctx.lineWidth=0.8;
+    ctx.beginPath(); ctx.moveTo(-len,0); ctx.lineTo(len,0); ctx.stroke();
+    ctx.globalAlpha=0.25;
+    ctx.fillStyle='#eef4dc';
+    ctx.beginPath(); ctx.ellipse(-len*0.25,-wid*0.3,len*0.5,wid*0.45,0,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
   const tx=new THREE.CanvasTexture(cv); tx.colorSpace=THREE.SRGBColorSpace;
   return tx;
 }
 const texLeaf=leafTexture();
+
+/* タイル境界をまたいで描く(シームレステクスチャ用) */
+function wrapDraw(ctx,size,fn){
+  for(const dx of [-size,0,size])for(const dy of [-size,0,size]){
+    ctx.save(); ctx.translate(dx,dy); fn(); ctx.restore();
+  }
+}
+function grassGroundTexture(){
+  const S=512;
+  const cv=document.createElement('canvas'); cv.width=cv.height=S;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#3d5c22'; ctx.fillRect(0,0,S,S);
+  // 大きな色ムラ
+  for(let i=0;i<420;i++){
+    const x=rand(S),y=rand(S),r=rand(14,60);
+    const g=ctx.createRadialGradient(x,y,1,x,y,r);
+    const h=rand(78,112),s2=rand(35,62),l=rand(24,44);
+    g.addColorStop(0,`hsla(${h},${s2}%,${l}%,0.22)`);
+    g.addColorStop(1,'hsla(90,40%,30%,0)');
+    ctx.fillStyle=g;
+    wrapDraw(ctx,S,()=>ctx.fillRect(x-r,y-r,r*2,r*2));
+  }
+  // 土の見え隠れ
+  for(let i=0;i<70;i++){
+    const x=rand(S),y=rand(S),r=rand(3,14);
+    ctx.fillStyle=`hsla(${rand(28,40)},${rand(25,40)}%,${rand(20,32)}%,${rand(0.15,0.4)})`;
+    wrapDraw(ctx,S,()=>{ctx.beginPath();ctx.ellipse(x,y,r,r*rand(0.5,1),rand(Math.PI),0,Math.PI*2);ctx.fill();});
+  }
+  // 草の茎ストローク
+  for(let i=0;i<8200;i++){
+    const x=rand(S),y=rand(S);
+    const a=-Math.PI/2+rand(-0.7,0.7), len=rand(4,13);
+    ctx.strokeStyle=`hsl(${rand(72,118)},${rand(40,70)}%,${rand(26,58)}%)`;
+    ctx.globalAlpha=rand(0.35,0.8);
+    ctx.lineWidth=rand(0.7,1.6);
+    wrapDraw(ctx,S,()=>{
+      ctx.beginPath();
+      ctx.moveTo(x,y);
+      ctx.quadraticCurveTo(x+Math.cos(a)*len*0.5+rand(-2,2),y+Math.sin(a)*len*0.5,x+Math.cos(a)*len,y+Math.sin(a)*len);
+      ctx.stroke();
+    });
+  }
+  ctx.globalAlpha=1;
+  const tx=new THREE.CanvasTexture(cv);
+  tx.colorSpace=THREE.SRGBColorSpace;
+  tx.wrapS=tx.wrapT=THREE.RepeatWrapping;
+  tx.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  return tx;
+}
+const texGround=grassGroundTexture();
+
+function rockTexture(){
+  const S=256;
+  const cv=document.createElement('canvas'); cv.width=cv.height=S;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#8a8580'; ctx.fillRect(0,0,S,S);
+  for(let i=0;i<600;i++){
+    const x=rand(S),y=rand(S),r=rand(2,26);
+    const l=rand(38,66);
+    ctx.fillStyle=`hsla(${rand(20,45)},${rand(3,10)}%,${l}%,${rand(0.08,0.22)})`;
+    wrapDraw(ctx,S,()=>{ctx.beginPath();ctx.ellipse(x,y,r,r*rand(0.4,1),rand(Math.PI),0,Math.PI*2);ctx.fill();});
+  }
+  // 亀裂
+  for(let i=0;i<110;i++){
+    let x=rand(S),y=rand(S);
+    ctx.strokeStyle=`hsla(30,8%,${rand(15,30)}%,${rand(0.25,0.5)})`;
+    ctx.lineWidth=rand(0.6,1.4);
+    const steps=Math.floor(rand(3,8));
+    let a=rand(Math.PI*2);
+    wrapDraw(ctx,S,()=>{
+      ctx.beginPath(); ctx.moveTo(x,y);
+      let px=x,py=y;
+      for(let k=0;k<steps;k++){
+        a+=rand(-0.7,0.7);
+        px+=Math.cos(a)*rand(5,16); py+=Math.sin(a)*rand(5,16);
+        ctx.lineTo(px,py);
+      }
+      ctx.stroke();
+    });
+  }
+  // ハイライト粒
+  for(let i=0;i<900;i++){
+    ctx.fillStyle=`hsla(40,8%,${rand(60,80)}%,${rand(0.1,0.3)})`;
+    const x=rand(S),y=rand(S);
+    wrapDraw(ctx,S,()=>ctx.fillRect(x,y,rand(0.6,1.8),rand(0.6,1.8)));
+  }
+  const tx=new THREE.CanvasTexture(cv);
+  tx.colorSpace=THREE.SRGBColorSpace;
+  tx.wrapS=tx.wrapT=THREE.RepeatWrapping;
+  tx.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  return tx;
+}
+const texRock=rockTexture();
+
+function barkTexture(){
+  const S=256;
+  const cv=document.createElement('canvas'); cv.width=cv.height=S;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#6a533c'; ctx.fillRect(0,0,S,S);
+  for(let i=0;i<130;i++){
+    let x=rand(S);
+    const l=rand(18,42), light=Math.random()<0.4;
+    ctx.strokeStyle=light?`hsla(30,28%,${rand(42,55)}%,${rand(0.3,0.6)})`:`hsla(26,32%,${rand(14,28)}%,${rand(0.35,0.7)})`;
+    ctx.lineWidth=rand(1.5,5);
+    ctx.beginPath();
+    let px=x;
+    ctx.moveTo(px,-10);
+    for(let y=0;y<=S+10;y+=18){
+      px=x+Simplex(x*0.05,y*0.03)*8;
+      ctx.lineTo(px,y);
+    }
+    ctx.stroke();
+    // 横ラップ
+    ctx.save(); ctx.translate(-S,0);
+    ctx.beginPath(); px=x; ctx.moveTo(px,-10);
+    for(let y=0;y<=S+10;y+=18){px=x+Simplex(x*0.05,y*0.03)*8;ctx.lineTo(px,y);}
+    ctx.stroke(); ctx.restore();
+  }
+  // 節
+  for(let i=0;i<8;i++){
+    const x=rand(S),y=rand(S);
+    ctx.fillStyle='rgba(30,20,12,0.5)';
+    ctx.beginPath(); ctx.ellipse(x,y,rand(3,6),rand(5,10),0,0,Math.PI*2); ctx.fill();
+  }
+  const tx=new THREE.CanvasTexture(cv);
+  tx.colorSpace=THREE.SRGBColorSpace;
+  tx.wrapS=tx.wrapT=THREE.RepeatWrapping;
+  return tx;
+}
+const texBark=barkTexture();
 
 function flowerTexture(){
   const cv=document.createElement('canvas'); cv.width=cv.height=64;
@@ -541,18 +709,22 @@ leafMat.onBeforeCompile=(sh)=>{
 };
 
 /* --- 広葉樹(幹 + 葉カード) --- */
-const TREE_N=520, CARDS_PER_TREE=12;
+const TREE_N=520, CARDS_PER_TREE=16;
 const BUSH_N=320, CARDS_PER_BUSH=6;
 {
   const treeSpots=scatter(TREE_N,treeValid);
   const bushSpots=scatter(BUSH_N,(x,z,h)=>h>1.6&&h<40&&getSlope(x,z)<0.5&&Math.hypot(x,z)>10);
-  // 幹
-  const trunkGeo=new THREE.CylinderGeometry(0.28,0.62,5.8,7);
+  // 幹(樹皮テクスチャ)
+  const trunkGeo=new THREE.CylinderGeometry(0.28,0.62,5.8,8);
   trunkGeo.translate(0,2.9,0);
-  const trunkMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95});
+  const trunkMat=new THREE.MeshStandardMaterial({color:0xffffff,map:texBark,roughness:0.95});
   const trunks=new THREE.InstancedMesh(trunkGeo,trunkMat,treeSpots.length);
+  // 枝
+  const branchGeo=new THREE.CylinderGeometry(0.07,0.17,2.8,5);
+  branchGeo.translate(0,1.4,0);
+  const branches=new THREE.InstancedMesh(branchGeo,trunkMat,treeSpots.length*2);
   // 葉カード(木 + 茂みを1つのInstancedMeshに)
-  const cardGeo=new THREE.PlaneGeometry(3.6,3.6);
+  const cardGeo=new THREE.PlaneGeometry(3.2,3.2);
   const totalCards=treeSpots.length*CARDS_PER_TREE+bushSpots.length*CARDS_PER_BUSH;
   const cards=new THREE.InstancedMesh(cardGeo,leafMat,totalCards);
   let ci=0;
@@ -563,15 +735,24 @@ const BUSH_N=320, CARDS_PER_BUSH=6;
     dummy.scale.setScalar(sc);
     dummy.updateMatrix();
     trunks.setMatrixAt(i,dummy.matrix);
-    cTmp.setHSL(rand(0.07,0.1),rand(0.25,0.4),rand(0.22,0.32));
+    cTmp.setHSL(rand(0.07,0.1),rand(0.25,0.4),rand(0.35,0.55));
     trunks.setColorAt(i,cTmp);
+    for(let b=0;b<2;b++){
+      const ba=rand(Math.PI*2);
+      dummy.position.set(s[0],s[1]-0.3+rand(3.6,4.8)*sc,s[2]);
+      dummy.rotation.set(0,ba,rand(0.6,1.1)*(b?1:-1));
+      dummy.scale.setScalar(sc);
+      dummy.updateMatrix();
+      branches.setMatrixAt(i*2+b,dummy.matrix);
+      branches.setColorAt(i*2+b,cTmp);
+    }
     const baseHue=rand(0.22,0.32), baseL=rand(0.34,0.46);
     for(let k=0;k<CARDS_PER_TREE;k++){
       const a=rand(Math.PI*2), r=Math.pow(Math.random(),0.6);
-      const ox=Math.cos(a)*r*2.6, oz=Math.sin(a)*r*2.6, oy=rand(-1.4,1.8);
+      const ox=Math.cos(a)*r*2.8, oz=Math.sin(a)*r*2.8, oy=rand(-1.6,2.1);
       dummy.position.set(s[0]+ox*sc,s[1]-0.3+(6.4+oy)*sc,s[2]+oz*sc);
       dummy.rotation.set(rand(-0.8,0.8),rand(Math.PI*2),rand(-0.8,0.8));
-      dummy.scale.setScalar(sc*rand(0.75,1.25));
+      dummy.scale.setScalar(sc*rand(0.7,1.2));
       dummy.updateMatrix();
       cards.setMatrixAt(ci,dummy.matrix);
       cTmp.setHSL(baseHue+rand(-0.02,0.02),rand(0.4,0.55),clamp(baseL+oy*0.045+rand(-0.03,0.03),0.2,0.55));
@@ -579,6 +760,8 @@ const BUSH_N=320, CARDS_PER_BUSH=6;
       ci++;
     }
   });
+  branches.castShadow=true;
+  scene.add(branches);
   bushSpots.forEach(s=>{
     const sc=rand(0.5,1.1);
     const baseHue=rand(0.23,0.31), baseL=rand(0.3,0.42);
@@ -733,11 +916,13 @@ function makeBladeGeo(){
   return g;
 }
 {
-  const m=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.85,side:THREE.DoubleSide});
+  const m=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.7,side:THREE.DoubleSide});
   m.onBeforeCompile=(sh)=>{
     sh.uniforms.uTime=timeU;
     sh.uniforms.uPlayer=grassPlayerU;
-    sh.vertexShader='uniform float uTime;\nuniform vec3 uPlayer;\n'+sh.vertexShader.replace(
+    sh.uniforms.uCloudAmt=cloudU;
+    sh.vertexShader=('uniform float uTime;\nuniform vec3 uPlayer;\nuniform float uCloudAmt;\nvarying float vCloud;\n'
+      +GLSL_NOISE)+sh.vertexShader.replace(
       '#include <begin_vertex>',
       `#include <begin_vertex>
        vec3 gip=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);
@@ -748,7 +933,14 @@ function makeBladeGeo(){
        float gwave=sin(dot(gip.xz,vec2(0.18,0.14))-uTime*1.7);
        float ggust=gwave*(0.55+0.45*sin(uTime*0.41+gph*1.7));
        transformed.x+=(ggust*0.30+sin(uTime*2.6+gph*7.3)*0.055)*gk;
-       transformed.z+=(cos(uTime*1.9+gph*5.1)*0.07+ggust*0.13)*gk;`
+       transformed.z+=(cos(uTime*1.9+gph*5.1)*0.07+ggust*0.13)*gk;
+       float gcs=tfbm(gip.xz*0.012+vec2(uTime*0.013,uTime*0.007));
+       vCloud=mix(1.0,0.72+0.28*smoothstep(0.35,0.65,gcs),uCloudAmt);`
+    );
+    sh.fragmentShader='varying float vCloud;\n'+sh.fragmentShader.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+       diffuseColor.rgb*=vCloud;`
     );
   };
   grassMesh=new THREE.InstancedMesh(makeBladeGeo(),m,GRASS_N);
@@ -878,6 +1070,50 @@ let fireflies;
   fireflies=new THREE.Points(g,m);
   fireflies.frustumCulled=false;
   scene.add(fireflies);
+}
+
+/* ============================================================
+   舞う花粉・胞子(昼の空気感)
+============================================================ */
+let pollen;
+{
+  const N=170;
+  const pos=new Float32Array(N*3); const seeds=new Float32Array(N);
+  for(let i=0;i<N;i++){
+    pos[i*3]=rand(-45,45); pos[i*3+2]=rand(-45,45)+16;
+    pos[i*3+1]=getHeight(pos[i*3],pos[i*3+2])+rand(0.3,5);
+    seeds[i]=rand(100);
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  g.setAttribute('seed',new THREE.BufferAttribute(seeds,1));
+  const m=new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    uniforms:{uTime:timeU,uDay:{value:1}},
+    vertexShader:`
+      attribute float seed; varying float vA;
+      uniform float uTime,uDay;
+      void main(){
+        vec3 p=position;
+        p.x+=sin(uTime*0.34+seed)*2.4;
+        p.y+=sin(uTime*0.5+seed*2.0)*1.1;
+        p.z+=cos(uTime*0.28+seed)*2.4;
+        vA=uDay*0.2*(0.5+0.5*sin(uTime*1.6+seed*9.0));
+        vec4 mv=modelViewMatrix*vec4(p,1.0);
+        gl_PointSize=34.0/max(-mv.z,1.0);
+        gl_Position=projectionMatrix*mv;
+      }`,
+    fragmentShader:`
+      varying float vA;
+      void main(){
+        float d=length(gl_PointCoord-0.5);
+        float a=smoothstep(0.5,0.1,d)*vA;
+        gl_FragColor=vec4(1.0,0.98,0.9,a);
+      }`
+  });
+  pollen=new THREE.Points(g,m);
+  pollen.frustumCulled=false;
+  scene.add(pollen);
 }
 
 /* ============================================================
@@ -1384,7 +1620,13 @@ function updateDayNight(dt){
   scene.fog.color.copy(fogCur);
   waterUniforms.uSkyCol.value.copy(skyHorNight).lerp(skyHorDay,dayF);
   fireflies.material.uniforms.uNight.value=nightF;
-  bloom.strength=0.32+nightF*0.25;
+  pollen.material.uniforms.uDay.value=dayF;
+  cloudU.value=dayF*0.85;
+  bloom.strength=0.3+nightF*0.25;
+  // 太陽グレア
+  sunGlare.position.copy(camera.position).addScaledVector(sunDir,900);
+  sunGlare.material.opacity=(0.42*dayF+0.25*duskF)*smoothstep(-0.05,0.1,sunDir.y);
+  sunGlare.material.color.setHex(0xfff2d0).lerp(new THREE.Color(0xff9a50),duskF*0.8);
   const hrs=Math.floor(dayTime/DAY_LEN*24), min=Math.floor((dayTime/DAY_LEN*24%1)*60);
   $('clockTxt').textContent=String(hrs).padStart(2,'0')+':'+String(min).padStart(2,'0');
   $('dayIcon').textContent=nightF>0.5?'🌙':(duskF>0.5?'🌇':'☀️');
@@ -1497,6 +1739,16 @@ function tick(){
       }
     }
     pa.needsUpdate=true;
+    const pp=pollen.geometry.attributes.position;
+    for(let i=0;i<pp.count;i++){
+      const dx=pp.getX(i)-player.pos.x, dz=pp.getZ(i)-player.pos.z;
+      if(dx*dx+dz*dz>55*55){
+        const a=rand(Math.PI*2),r=rand(4,45);
+        const x=player.pos.x+Math.cos(a)*r,z=player.pos.z+Math.sin(a)*r;
+        pp.setXYZ(i,x,getHeight(x,z)+rand(0.3,5),z);
+      }
+    }
+    pp.needsUpdate=true;
   }
 
   /* --- クリスタル --- */
