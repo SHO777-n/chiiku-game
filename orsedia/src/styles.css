@@ -1,0 +1,60 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  background: #0b0f14;
+}
+
+.app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-wrapper {
+  position: relative;
+}
+
+.game-container canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.hud {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  pointer-events: none;
+  font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+}
+
+.hud-hp-label {
+  color: #eef2f6;
+  font-size: 12px;
+  font-weight: 700;
+  text-shadow: 1px 1px 2px #000;
+  margin-bottom: 3px;
+}
+
+.hud-hp-bar {
+  width: 160px;
+  height: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid #8fb3d9;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.hud-hp-fill {
+  height: 100%;
+  transition: width 0.15s ease-out;
+}

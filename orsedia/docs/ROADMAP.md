@@ -1,7 +1,7 @@
 # ROADMAP — 開発ロードマップ
 
-- 版数: 0.1
-- 現在フェーズ: **Phase 1(最小プレイアブル版)実装中**
+- 版数: 0.2
+- 現在フェーズ: **Phase 1 完了 → Phase 2(Vertical Slice)へ**
 
 ---
 
@@ -11,7 +11,7 @@
 - 技術選定(TypeScript + React + Phaser 3 + Vite + Vitest)
 - GDD / TDD / WORLD / STORY / SYSTEMS / ROADMAP / TASKS 初稿
 
-## Phase 1: 最小プレイアブル版 — 🔄 進行中
+## Phase 1: 最小プレイアブル版 — ✅ 完了(2026-07-11)
 
 ゴール: **起動して遊べる**。タイトル → フィールド移動 → 会話 → 戦闘 → ゲームオーバー → セーブ/ロード。
 

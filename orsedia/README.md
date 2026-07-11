@@ -1,7 +1,8 @@
 # 残響のオルセディア(Echoes of Orsedia)
 
 土地に残された「記憶の残響」を聴く見習い聴律師リオの、2Dトップダウン・アクションRPG。
-現在は **Phase 1(最小プレイアブル版)** を開発中です。
+**Phase 1(最小プレイアブル版)完了** — タイトル・移動・会話・戦闘・ゲームオーバー・
+セーブ/ロードまで一巡プレイできます。次は Phase 2(30分の Vertical Slice)。
 
 - 企画書: [docs/GDD.md](docs/GDD.md)
 - 技術設計: [docs/TDD.md](docs/TDD.md)
@@ -30,7 +31,7 @@ npm run dev
 | 移動 | WASD / 矢印キー |
 | 攻撃 | Space / J |
 | 会話・決定 | E / Enter |
-| セーブ | S(フィールド上) |
+| セーブ | K(フィールド上) |
 
 ## テスト・品質チェック
 
@@ -49,4 +50,5 @@ npm run build   # 型チェック + 本番ビルド
 
 ## 既知の問題
 
-- Phase 1 実装中(docs/CHANGELOG.md を参照)
+- [TASKS.md「Phase 1 の既知の問題」](TASKS.md)を参照
+  (バンドルサイズ約1.6MB、攻撃判定の当てにくさ、敵リポップなし、BGM/SE未実装)
