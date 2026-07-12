@@ -26,7 +26,12 @@
 
 - Node.js 20 以上 / npm
 
-## 起動方法
+## 遊び方(いちばん簡単)
+
+**`play.html` をブラウザで開くだけ**(ダブルクリックでOK。インストール・通信不要)。
+ゲームの更新後は `npm run build:single` で `play.html` を再生成する。
+
+## 開発時の起動方法
 
 ```bash
 cd orsedia
