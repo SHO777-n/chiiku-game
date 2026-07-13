@@ -18,6 +18,7 @@ import { SaveManager } from '../systems/SaveManager';
 import { AudioSystem } from '../systems/AudioSystem';
 import { gameState, evaluateConditions, getDerivedStats } from '../systems/GameState';
 import { eventBus } from '../EventBus';
+import { touchInput } from '../touchInput';
 import { GAME_WIDTH, GAME_HEIGHT, PLAYER, GATE_FLAGS } from '../config';
 
 interface GameSceneData {
@@ -53,6 +54,13 @@ export class GameScene extends Phaser.Scene {
   private toastTimer: Phaser.Time.TimerEvent | null = null;
   private bossActive = false;
   private lastSkillAt = 0;
+  private prevTouch = {
+    talk: 0,
+    menu: 0,
+    save: 0,
+    skills: [0, 0, 0, 0],
+    stickY: 0,
+  };
   private notifyHandler = (p: { message: string }) => this.showToast(p.message);
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -80,6 +88,13 @@ export class GameScene extends Phaser.Scene {
       eventBus.off('notify', this.notifyHandler);
     });
 
+    this.prevTouch = {
+      talk: touchInput.talkPresses,
+      menu: touchInput.menuPresses,
+      save: touchInput.savePresses,
+      skills: [...touchInput.skillPresses],
+      stickY: 0,
+    };
     this.npcSprites = [];
     this.interactables = [];
     this.lampGlows = [];
@@ -100,6 +115,11 @@ export class GameScene extends Phaser.Scene {
     this.setupUiObjects();
     this.setupInput();
     this.setupPhysics();
+
+    // タッチ: 画面タップで会話送り(選択肢はスティック上下+決定)
+    this.input.on('pointerdown', () => {
+      if (this.dialogueBox.isOpen) this.dialogueBox.advance();
+    });
 
     // 新規開始の導入
     if (mapId === 'village' && gameState.s.quests.length === 0) {
@@ -439,6 +459,23 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, deltaMs: number): void {
     const now = this.time.now;
 
+    // タッチ入力の「押した瞬間」検出(カウンタ差分方式)
+    const touchEdges = {
+      talk: touchInput.talkPresses > this.prevTouch.talk,
+      menu: touchInput.menuPresses > this.prevTouch.menu,
+      save: touchInput.savePresses > this.prevTouch.save,
+      skills: touchInput.skillPresses.map((n, i) => n > this.prevTouch.skills[i]),
+      choiceUp: touchInput.dirY < -0.5 && this.prevTouch.stickY >= -0.5,
+      choiceDown: touchInput.dirY > 0.5 && this.prevTouch.stickY <= 0.5,
+    };
+    this.prevTouch = {
+      talk: touchInput.talkPresses,
+      menu: touchInput.menuPresses,
+      save: touchInput.savePresses,
+      skills: [...touchInput.skillPresses],
+      stickY: touchInput.dirY,
+    };
+
     // 時間・昼夜・天候
     gameState.advanceClock(advanceClock(gameState.s.clockMin, deltaMs));
     this.updateLighting();
@@ -452,16 +489,22 @@ export class GameScene extends Phaser.Scene {
 
     const justTalk =
       Phaser.Input.Keyboard.JustDown(this.keys.talk) ||
-      Phaser.Input.Keyboard.JustDown(this.keys.talkAlt);
+      Phaser.Input.Keyboard.JustDown(this.keys.talkAlt) ||
+      touchEdges.talk;
 
     // 会話中
     if (this.dialogueBox.isOpen) {
       this.player.stopMoving();
-      if (Phaser.Input.Keyboard.JustDown(this.keys.up) || Phaser.Input.Keyboard.JustDown(this.keys.w))
+      if (
+        Phaser.Input.Keyboard.JustDown(this.keys.up) ||
+        Phaser.Input.Keyboard.JustDown(this.keys.w) ||
+        touchEdges.choiceUp
+      )
         this.dialogueBox.moveChoice(-1);
       if (
         Phaser.Input.Keyboard.JustDown(this.keys.down) ||
-        Phaser.Input.Keyboard.JustDown(this.keys.s)
+        Phaser.Input.Keyboard.JustDown(this.keys.s) ||
+        touchEdges.choiceDown
       )
         this.dialogueBox.moveChoice(1);
       if (justTalk) this.dialogueBox.advance();
@@ -474,7 +517,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (Phaser.Input.Keyboard.JustDown(this.keys.menu)) {
+    if (Phaser.Input.Keyboard.JustDown(this.keys.menu) || touchEdges.menu) {
       gameState.openMenu();
       return;
     }
@@ -482,10 +525,10 @@ export class GameScene extends Phaser.Scene {
     // 移動
     this.player.applyMoveIntent(
       {
-        up: this.keys.up.isDown || this.keys.w.isDown,
-        down: this.keys.down.isDown || this.keys.s.isDown,
-        left: this.keys.left.isDown || this.keys.a.isDown,
-        right: this.keys.right.isDown || this.keys.d.isDown,
+        up: this.keys.up.isDown || this.keys.w.isDown || touchInput.dirY < -0.35,
+        down: this.keys.down.isDown || this.keys.s.isDown || touchInput.dirY > 0.35,
+        left: this.keys.left.isDown || this.keys.a.isDown || touchInput.dirX < -0.35,
+        right: this.keys.right.isDown || this.keys.d.isDown || touchInput.dirX > 0.35,
       },
       tick.stunned,
     );
@@ -499,7 +542,8 @@ export class GameScene extends Phaser.Scene {
     // 攻撃・スキル
     if (
       Phaser.Input.Keyboard.JustDown(this.keys.attack) ||
-      Phaser.Input.Keyboard.JustDown(this.keys.attackAlt)
+      Phaser.Input.Keyboard.JustDown(this.keys.attackAlt) ||
+      touchInput.attackDown
     ) {
       this.performAttack(now);
     }
@@ -510,7 +554,9 @@ export class GameScene extends Phaser.Scene {
       [this.keys.skill4, 3],
     ];
     hotkeys.forEach(([key, idx]) => {
-      if (Phaser.Input.Keyboard.JustDown(key)) this.useSkillByIndex(idx, now);
+      if (Phaser.Input.Keyboard.JustDown(key) || touchEdges.skills[idx]) {
+        this.useSkillByIndex(idx, now);
+      }
     });
 
     // 敵・仲間
@@ -535,7 +581,7 @@ export class GameScene extends Phaser.Scene {
     this.checkPortals();
 
     // セーブ
-    if (Phaser.Input.Keyboard.JustDown(this.keys.save)) this.saveGame();
+    if (Phaser.Input.Keyboard.JustDown(this.keys.save) || touchEdges.save) this.saveGame();
 
     // ボスBGM
     this.updateBossMusic();

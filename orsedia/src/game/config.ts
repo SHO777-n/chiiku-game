@@ -34,6 +34,10 @@ export function buildGameConfig(parent: HTMLElement): Phaser.Types.Core.GameConf
     height: GAME_HEIGHT,
     backgroundColor: '#0a0d12',
     pixelArt: true,
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
     physics: {
       default: 'arcade',
       arcade: {

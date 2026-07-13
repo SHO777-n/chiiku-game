@@ -24,8 +24,9 @@ export class GameOverScene extends Phaser.Scene {
       .setAlpha(0);
     this.tweens.add({ targets: text, alpha: 1, duration: 1200 });
 
+    this.input.once('pointerdown', () => this.scene.start('title'));
     this.add
-      .text(cx, GAME_HEIGHT * 0.6, '[ENTER] タイトルへもどる', {
+      .text(cx, GAME_HEIGHT * 0.6, 'タップ / ENTER でタイトルへもどる', {
         fontSize: '16px',
         color: '#eef2f6',
       })
