@@ -55,21 +55,29 @@ export class TitleScene extends Phaser.Scene {
 
     const hasSave = SaveManager.hasSave();
     const start = this.add
-      .text(cx, GAME_HEIGHT * 0.58, '[ENTER] はじめから', { fontSize: '19px', color: '#ffe9a8' })
-      .setOrigin(0.5);
+      .text(cx, GAME_HEIGHT * 0.58, 'はじめから', { fontSize: '22px', color: '#ffe9a8' })
+      .setOrigin(0.5)
+      .setPadding(24, 10, 24, 10)
+      .setInteractive({ useHandCursor: true });
+    start.on('pointerdown', () => this.scene.start('game', { loadSave: false }));
     this.tweens.add({ targets: start, alpha: 0.5, duration: 800, yoyo: true, repeat: -1 });
 
     if (hasSave) {
-      this.add
-        .text(cx, GAME_HEIGHT * 0.58 + 36, '[C] つづきから', { fontSize: '19px', color: '#a8d8ff' })
-        .setOrigin(0.5);
+      const cont = this.add
+        .text(cx, GAME_HEIGHT * 0.58 + 44, 'つづきから', { fontSize: '22px', color: '#a8d8ff' })
+        .setOrigin(0.5)
+        .setPadding(24, 10, 24, 10)
+        .setInteractive({ useHandCursor: true });
+      cont.on('pointerdown', () => this.scene.start('game', { loadSave: true }));
     }
 
     this.add
-      .text(cx, GAME_HEIGHT * 0.9, 'WASD/矢印: 移動  SPACE: 攻撃  E: 会話  M: メニュー  K: セーブ', {
-        fontSize: '12px',
-        color: '#5a6a7a',
-      })
+      .text(
+        cx,
+        GAME_HEIGHT * 0.9,
+        'タップ / ENTERキーで開始   PC: WASD移動 SPACE攻撃 E会話 Mメニュー Kセーブ',
+        { fontSize: '12px', color: '#5a6a7a' },
+      )
       .setOrigin(0.5);
 
     AudioSystem.playBgm('title');
@@ -80,6 +88,11 @@ export class TitleScene extends Phaser.Scene {
     if (hasSave) {
       this.input.keyboard?.once('keydown-C', () => {
         this.scene.start('game', { loadSave: true });
+      });
+    } else {
+      // セーブが無ければ画面のどこをタップしても開始できる(スマホ向け)
+      this.input.once('pointerdown', () => {
+        this.scene.start('game', { loadSave: false });
       });
     }
   }

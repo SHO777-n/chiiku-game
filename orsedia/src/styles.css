@@ -23,6 +23,21 @@ body,
 
 .game-wrapper {
   position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.game-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .game-container canvas {
@@ -305,4 +320,147 @@ body,
 
 .list button:hover:not(:disabled) {
   background: #3a4a68;
+}
+
+
+/* ---------- タッチコントロール ---------- */
+
+.touch-controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  z-index: 5;
+  font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+}
+
+.stick-base {
+  position: absolute;
+  left: 18px;
+  bottom: 24px;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: rgba(20, 26, 40, 0.35);
+  border: 2px solid rgba(157, 184, 216, 0.4);
+  pointer-events: auto;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stick-knob {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(157, 184, 216, 0.55);
+  border: 2px solid rgba(238, 242, 246, 0.6);
+  pointer-events: none;
+}
+
+.touch-buttons {
+  position: absolute;
+  right: 14px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.touch-btn {
+  pointer-events: auto;
+  touch-action: none;
+  border-radius: 50%;
+  border: 2px solid rgba(157, 184, 216, 0.5);
+  background: rgba(20, 26, 40, 0.5);
+  color: #eef2f6;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.touch-btn:active {
+  background: rgba(60, 80, 120, 0.7);
+}
+
+.attack-btn {
+  width: 76px;
+  height: 76px;
+  font-size: 30px;
+  border-color: rgba(255, 233, 168, 0.6);
+}
+
+.talk-btn {
+  width: 60px;
+  height: 60px;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.main-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.skill-row {
+  display: flex;
+  gap: 8px;
+}
+
+.skill-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 11px;
+  border-color: rgba(138, 226, 200, 0.5);
+}
+
+.touch-corner {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.corner-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+
+/* ---------- 小画面調整 ---------- */
+
+@media (max-width: 700px) {
+  .hud-panel {
+    min-width: 170px;
+    padding: 5px 8px;
+    transform: scale(0.85);
+    transform-origin: top left;
+  }
+
+  .hud-quest {
+    max-width: 200px;
+    transform: scale(0.85);
+    transform-origin: top left;
+  }
+
+  .hud-keys {
+    display: none;
+  }
+
+  .panel {
+    padding: 10px;
+  }
+
+  .list li {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
 }

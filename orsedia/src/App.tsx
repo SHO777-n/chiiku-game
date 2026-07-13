@@ -4,6 +4,7 @@ import { buildGameConfig } from './game/config';
 import { Hud } from './ui/Hud';
 import { Menu } from './ui/Menu';
 import { Shop } from './ui/Shop';
+import { TouchControls } from './ui/TouchControls';
 
 /** アプリシェル。Phaser ゲームと React 製 UI(HUD/メニュー/ショップ)の重ね合わせ。 */
 export function App() {
@@ -24,6 +25,7 @@ export function App() {
       <div className="game-wrapper">
         <div ref={containerRef} className="game-container" />
         <Hud />
+        <TouchControls />
         <Menu />
         <Shop />
       </div>

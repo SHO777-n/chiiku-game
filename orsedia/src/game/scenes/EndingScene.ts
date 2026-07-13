@@ -112,16 +112,18 @@ export class EndingScene extends Phaser.Scene {
     this.tweens.add({ targets: body, alpha: 1, duration: 1800, delay: 800 });
 
     const hint = this.add
-      .text(cx, GAME_HEIGHT - 40, '[ENTER] タイトルへ', { fontSize: '14px', color: '#8fb3d9' })
+      .text(cx, GAME_HEIGHT - 40, 'タップ / ENTER でタイトルへ', { fontSize: '14px', color: '#8fb3d9' })
       .setOrigin(0.5)
       .setAlpha(0);
     this.tweens.add({ targets: hint, alpha: 1, duration: 800, delay: 2600 });
 
     this.time.delayedCall(2600, () => {
-      this.input.keyboard?.once('keydown-ENTER', () => {
+      const toTitle = () => {
         AudioSystem.stopBgm();
         this.scene.start('title');
-      });
+      };
+      this.input.keyboard?.once('keydown-ENTER', toTitle);
+      this.input.once('pointerdown', toTitle);
     });
   }
 }
