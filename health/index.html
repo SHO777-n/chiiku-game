@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>📷 カメラ体調チェッカー</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+    background: linear-gradient(160deg, #0f172a 0%, #1e293b 60%, #134e4a 100%);
+    color: #e2e8f0;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+  .screen {
+    width: 100%;
+    max-width: 480px;
+    padding: max(20px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+    display: none;
+    flex-direction: column;
+    gap: 16px;
+    flex: 1;
+  }
+  .screen.active { display: flex; }
+
+  h1 { font-size: 1.5rem; text-align: center; line-height: 1.4; }
+  h1 .sub { display: block; font-size: 0.85rem; font-weight: normal; color: #94a3b8; margin-top: 6px; }
+
+  .card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 16px;
+  }
+  .card h2 { font-size: 0.95rem; color: #5eead4; margin-bottom: 10px; }
+  .card ul { list-style: none; }
+  .card li { padding: 5px 0; font-size: 0.9rem; line-height: 1.5; }
+
+  .disclaimer {
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 0.78rem;
+    color: #fcd34d;
+    line-height: 1.6;
+  }
+
+  button.primary {
+    appearance: none;
+    border: none;
+    border-radius: 999px;
+    padding: 16px 24px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #042f2e;
+    background: linear-gradient(135deg, #5eead4, #2dd4bf);
+    box-shadow: 0 6px 20px rgba(45, 212, 191, 0.35);
+    cursor: pointer;
+    width: 100%;
+  }
+  button.primary:active { transform: scale(0.97); }
+  button.ghost {
+    appearance: none;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: transparent;
+    color: #cbd5e1;
+    border-radius: 999px;
+    padding: 12px 24px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  /* ---- 測定画面 ---- */
+  .cam-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    border-radius: 20px;
+    overflow: hidden;
+    background: #000;
+    flex-shrink: 0;
+  }
+  .cam-wrap video {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1); /* 自撮りミラー */
+  }
+  .cam-wrap svg.mask { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .guide-ellipse {
+    fill: none;
+    stroke: rgba(255,255,255,0.85);
+    stroke-width: 2.5;
+    stroke-dasharray: 8 6;
+    transition: stroke 0.3s;
+  }
+  .cam-wrap.locked .guide-ellipse { stroke: #2dd4bf; stroke-dasharray: none; }
+
+  .cam-status {
+    position: absolute;
+    left: 0; right: 0; bottom: 14px;
+    text-align: center;
+    font-size: 0.95rem;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    padding: 0 16px;
+  }
+  .countdown-num {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 5rem;
+    font-weight: bold;
+    color: #5eead4;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.7);
+    pointer-events: none;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .ring { width: 64px; height: 64px; flex-shrink: 0; }
+  .ring circle.bg { fill: none; stroke: rgba(255,255,255,0.12); stroke-width: 6; }
+  .ring circle.fg {
+    fill: none; stroke: #2dd4bf; stroke-width: 6; stroke-linecap: round;
+    transform: rotate(-90deg); transform-origin: center;
+    transition: stroke-dashoffset 0.2s linear;
+  }
+  .ring text { fill: #e2e8f0; font-size: 15px; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
+  .progress-label { font-size: 0.9rem; color: #cbd5e1; line-height: 1.5; }
+
+  /* ---- 結果画面 ---- */
+  .verdict {
+    border-radius: 16px;
+    padding: 18px 16px;
+    text-align: center;
+  }
+  .verdict.ok    { background: rgba(45, 212, 191, 0.12); border: 1px solid rgba(45, 212, 191, 0.5); }
+  .verdict.warn  { background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.5); }
+  .verdict.alert { background: rgba(251, 113, 133, 0.12); border: 1px solid rgba(251, 113, 133, 0.55); }
+  .verdict .icon { font-size: 2.2rem; }
+  .verdict .title { font-size: 1.15rem; font-weight: bold; margin: 8px 0 6px; }
+  .verdict.ok .title { color: #5eead4; }
+  .verdict.warn .title { color: #fcd34d; }
+  .verdict.alert .title { color: #fda4af; }
+  .verdict .desc { font-size: 0.85rem; color: #cbd5e1; line-height: 1.6; }
+
+  .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .metric {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 14px;
+    text-align: center;
+  }
+  .metric .label { font-size: 0.75rem; color: #94a3b8; }
+  .metric .value { font-size: 1.9rem; font-weight: bold; margin: 4px 0; }
+  .metric .unit { font-size: 0.85rem; font-weight: normal; color: #94a3b8; }
+  .metric .note { font-size: 0.72rem; color: #94a3b8; line-height: 1.5; }
+  .metric .tag {
+    display: inline-block;
+    font-size: 0.72rem;
+    padding: 2px 10px;
+    border-radius: 999px;
+    margin-top: 4px;
+  }
+  .tag.good { background: rgba(45,212,191,0.18); color: #5eead4; }
+  .tag.mid  { background: rgba(251,191,36,0.18); color: #fcd34d; }
+  .tag.bad  { background: rgba(251,113,133,0.18); color: #fda4af; }
+
+  .gauge-wrap { margin-top: 8px; }
+  .gauge {
+    position: relative;
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #93c5fd, #86efac 35%, #86efac 65%, #fda4af);
+  }
+  .gauge .needle {
+    position: absolute;
+    top: -4px;
+    width: 4px; height: 18px;
+    border-radius: 2px;
+    background: #fff;
+    box-shadow: 0 0 6px rgba(0,0,0,0.6);
+    transform: translateX(-50%);
+    transition: left 0.5s;
+  }
+  .gauge-labels { display: flex; justify-content: space-between; font-size: 0.68rem; color: #94a3b8; margin-top: 4px; }
+
+  .findings li { padding: 7px 0; font-size: 0.88rem; line-height: 1.55; border-bottom: 1px dashed rgba(255,255,255,0.08); }
+  .findings li:last-child { border-bottom: none; }
+
+  .symptom-list { display: flex; flex-direction: column; gap: 8px; }
+  .symptom {
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .symptom .box {
+    width: 24px; height: 24px;
+    border-radius: 7px;
+    border: 2px solid rgba(255,255,255,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem;
+    color: transparent;
+    flex-shrink: 0;
+  }
+  .symptom.on { border-color: rgba(251,191,36,0.6); }
+  .symptom.on .box { background: #fbbf24; border-color: #fbbf24; color: #422006; }
+
+  .err-box {
+    background: rgba(251, 113, 133, 0.12);
+    border: 1px solid rgba(251, 113, 133, 0.5);
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #fecdd3;
+  }
+  .hidden { display: none !important; }
+  footer { font-size: 0.7rem; color: #64748b; text-align: center; margin-top: auto; padding-top: 12px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<!-- ============ 開始画面 ============ -->
+<section id="screen-intro" class="screen active">
+  <h1>📷 カメラ体調チェッカー
+    <span class="sub">顔を映すだけで体調のサインを簡易チェック</span>
+  </h1>
+
+  <div class="card">
+    <h2>🔍 なにがわかるの?</h2>
+    <ul>
+      <li>❤️ <b>推定心拍数</b> — 顔の皮膚の色のごくわずかな変化(脈の波)をカメラで読み取ります(rPPG方式)</li>
+      <li>🎨 <b>顔色の傾向</b> — 赤み(ほてり)や青白さ(血色不良)を分析します</li>
+      <li>📋 <b>総合チェック</b> — 自覚症状と合わせて「検温したほうがいいか」の目安を表示します</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>💡 うまく測るコツ</h2>
+    <ul>
+      <li>☀️ 明るい場所で(顔に均等に光が当たるように)</li>
+      <li>🎯 顔を枠のなかにおさめて</li>
+      <li>🧘 測定中の約20秒間は動かず、話さないで</li>
+      <li>🕶 メガネはOK、前髪はおでこが見えるとより正確</li>
+    </ul>
+  </div>
+
+  <div class="disclaimer">
+    ⚠️ このアプリは<b>医療機器ではありません</b>。結果はあくまで簡易的な目安であり、病気の診断・体温の測定はできません。体調が悪いと感じるときは、必ず体温計で検温し、医療機関に相談してください。緊急のときは迷わず救急(119)へ。
+  </div>
+
+  <button class="primary" id="btn-start">✨ チェックをはじめる</button>
+
+  <div id="err-intro" class="err-box hidden"></div>
+
+  <footer>カメラの映像は端末内でのみ処理され、どこにも送信・保存されません。</footer>
+</section>
+
+<!-- ============ 測定画面 ============ -->
+<section id="screen-measure" class="screen">
+  <h1 style="font-size:1.2rem;">😊 顔を枠に合わせてください</h1>
+
+  <div class="cam-wrap" id="cam-wrap">
+    <video id="video" autoplay muted playsinline></video>
+    <svg class="mask" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <mask id="holeMask">
+          <rect width="300" height="400" fill="white"/>
+          <ellipse cx="150" cy="185" rx="95" ry="125" fill="black"/>
+        </mask>
+      </defs>
+      <rect width="300" height="400" fill="rgba(0,0,0,0.45)" mask="url(#holeMask)"/>
+      <ellipse class="guide-ellipse" cx="150" cy="185" rx="95" ry="125"/>
+    </svg>
+    <div class="countdown-num hidden" id="countdown"></div>
+    <div class="cam-status" id="cam-status">カメラを準備中…</div>
+  </div>
+
+  <div class="progress-row hidden" id="progress-row">
+    <svg class="ring" viewBox="0 0 64 64">
+      <circle class="bg" cx="32" cy="32" r="27"/>
+      <circle class="fg" id="ring-fg" cx="32" cy="32" r="27" stroke-dasharray="169.6" stroke-dashoffset="169.6"/>
+      <text id="ring-text" x="32" y="33">20</text>
+    </svg>
+    <div class="progress-label">測定中… そのまま動かないでください。<br>皮膚の色の変化から脈を読み取っています。</div>
+  </div>
+
+  <button class="ghost" id="btn-cancel">やめる</button>
+</section>
+
+<!-- ============ 結果画面 ============ -->
+<section id="screen-result" class="screen">
+  <h1 style="font-size:1.2rem;">📋 チェック結果</h1>
+
+  <div class="verdict" id="verdict">
+    <div class="icon" id="verdict-icon"></div>
+    <div class="title" id="verdict-title"></div>
+    <div class="desc" id="verdict-desc"></div>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric">
+      <div class="label">推定心拍数</div>
+      <div class="value" id="m-bpm">–<span class="unit"> bpm</span></div>
+      <div id="m-bpm-tag"></div>
+      <div class="note">安静時のめやす:60〜100</div>
+    </div>
+    <div class="metric">
+      <div class="label">測定の信頼度</div>
+      <div class="value" id="m-quality" style="font-size:1.5rem; margin-top:10px;">–</div>
+      <div class="note" id="m-quality-note">脈波の信号の強さ</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🎨 顔色の傾向</h2>
+    <div class="gauge-wrap">
+      <div class="gauge"><div class="needle" id="color-needle" style="left:50%"></div></div>
+      <div class="gauge-labels"><span>青白い</span><span>ふつう</span><span>赤み強い</span></div>
+    </div>
+    <div style="font-size:0.85rem; color:#cbd5e1; margin-top:10px; line-height:1.6;" id="color-desc"></div>
+  </div>
+
+  <div class="card">
+    <h2>🔎 みつかったサイン</h2>
+    <ul class="findings" id="findings"></ul>
+  </div>
+
+  <div class="card">
+    <h2>🙋 自覚症状はありますか?(タップで選択)</h2>
+    <div class="symptom-list" id="symptoms">
+      <div class="symptom" data-k="fever"><span>🌡 熱っぽい・体がだるい</span><span class="box">✓</span></div>
+      <div class="symptom" data-k="head"><span>🤕 頭痛・めまい</span><span class="box">✓</span></div>
+      <div class="symptom" data-k="throat"><span>😮‍💨 咳・のどの痛み</span><span class="box">✓</span></div>
+      <div class="symptom" data-k="chill"><span>🥶 寒気・ふるえ</span><span class="box">✓</span></div>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    ⚠️ 本結果は医学的診断ではありません。カメラによる推定には誤差があります。体調に不安があるときは体温計で検温し、医療機関にご相談ください。
+  </div>
+
+  <button class="primary" id="btn-retry">🔄 もういちど測る</button>
+  <button class="ghost" id="btn-home">はじめにもどる</button>
+</section>
+
+<script>
+(() => {
+  'use strict';
+
+  // ================= 設定 =================
+  const MEASURE_SEC = 20;        // 測定時間
+  const ALIGN_STABLE_FRAMES = 40; // 顔認識が安定したとみなす連続フレーム数
+  const FS = 30;                  // 解析用リサンプリング周波数 (Hz)
+  const HR_MIN = 0.7, HR_MAX = 3.3; // 心拍探索帯域 42〜198 bpm
+
+  // ================= 要素 =================
+  const $ = (id) => document.getElementById(id);
+  const screens = {
+    intro: $('screen-intro'),
+    measure: $('screen-measure'),
+    result: $('screen-result'),
+  };
+  const video = $('video');
+  const camWrap = $('cam-wrap');
+  const camStatus = $('cam-status');
+  const countdownEl = $('countdown');
+  const progressRow = $('progress-row');
+  const ringFg = $('ring-fg');
+  const ringText = $('ring-text');
+  const RING_LEN = 169.6;
+
+  let stream = null;
+  let rafId = null;
+  let state = 'idle'; // idle | align | countdown | measure
+  let alignOkFrames = 0;
+  let countdownEndAt = 0;
+  let measureStartAt = 0;
+  let samples = null; // {t:[], r:[], g:[], b:[], skin:[]}
+  const work = document.createElement('canvas');
+  const wctx = work.getContext('2d', { willReadFrequently: true });
+
+  function showScreen(name) {
+    for (const k in screens) screens[k].classList.toggle('active', k === name);
+    window.scrollTo(0, 0);
+  }
+
+  // ================= カメラ =================
+  async function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error(location.protocol === 'https:' || location.hostname === 'localhost'
+        ? 'このブラウザはカメラに対応していません。SafariまたはChromeの最新版でお試しください。'
+        : 'カメラを使うには HTTPS でこのページを開く必要があります。GitHub Pages などの https:// のURLから開いてください。');
+    }
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false,
+    });
+    video.srcObject = stream;
+    await video.play();
+  }
+
+  function stopCamera() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    video.srcObject = null;
+  }
+
+  // ================= フレーム解析 =================
+  // 顔ガイド楕円は画面中央やや上。映像はobject-fit:coverなので、
+  // フレーム中央付近の「おでこ・両ほほ」相当の3領域をサンプリングする。
+  function sampleFrame() {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return null;
+    const W = 160, H = Math.round(160 * vh / vw);
+    work.width = W; work.height = H;
+    wctx.drawImage(video, 0, 0, W, H);
+
+    const cx = W / 2, cy = H * 0.46;
+    const u = Math.min(W, H); // 基準スケール
+    const rois = [
+      { x: cx,            y: cy - u * 0.16, r: u * 0.09 }, // おでこ
+      { x: cx - u * 0.13, y: cy + u * 0.05, r: u * 0.08 }, // ほほ(左)
+      { x: cx + u * 0.13, y: cy + u * 0.05, r: u * 0.08 }, // ほほ(右)
+    ];
+
+    let sr = 0, sg = 0, sb = 0, skinN = 0, totalN = 0;
+    for (const roi of rois) {
+      const x0 = Math.max(0, Math.round(roi.x - roi.r));
+      const y0 = Math.max(0, Math.round(roi.y - roi.r));
+      const w = Math.min(W - x0, Math.round(roi.r * 2));
+      const h = Math.min(H - y0, Math.round(roi.r * 2));
+      if (w <= 0 || h <= 0) continue;
+      const data = wctx.getImageData(x0, y0, w, h).data;
+      const r2 = roi.r * roi.r;
+      for (let yy = 0; yy < h; yy++) {
+        for (let xx = 0; xx < w; xx++) {
+          const dx = x0 + xx - roi.x, dy = y0 + yy - roi.y;
+          if (dx * dx + dy * dy > r2) continue;
+          totalN++;
+          const i = (yy * w + xx) * 4;
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          // ゆるい肌色フィルタ(髪・背景・目を除外)
+          if (r > 55 && r > g && r > b && (r - b) > 8 && g > b * 0.7) {
+            sr += r; sg += g; sb += b; skinN++;
+          }
+        }
+      }
+    }
+    if (totalN === 0) return null;
+    return {
+      r: skinN ? sr / skinN : 0,
+      g: skinN ? sg / skinN : 0,
+      b: skinN ? sb / skinN : 0,
+      skinRatio: skinN / totalN,
+    };
+  }
+
+  function loop() {
+    rafId = requestAnimationFrame(loop);
+    const s = sampleFrame();
+    if (!s) return;
+    const now = performance.now() / 1000;
+    const bright = (s.r + s.g + s.b) / 3;
+
+    if (state === 'align') {
+      let msg = '';
+      if (s.skinRatio < 0.45) msg = '顔を枠のなかに合わせてください';
+      else if (bright < 55) msg = '暗すぎます。明るい場所へ移動してください';
+      else if (bright > 235) msg = '明るすぎます。逆光を避けてください';
+      if (msg) {
+        alignOkFrames = 0;
+        camWrap.classList.remove('locked');
+        camStatus.textContent = msg;
+      } else {
+        alignOkFrames++;
+        camWrap.classList.add('locked');
+        camStatus.textContent = 'そのまま… ✨';
+        if (alignOkFrames >= ALIGN_STABLE_FRAMES) {
+          state = 'countdown';
+          countdownEndAt = now + 3;
+          countdownEl.classList.remove('hidden');
+        }
+      }
+    } else if (state === 'countdown') {
+      const remain = countdownEndAt - now;
+      if (s.skinRatio < 0.35) { // 途中で外れたらやり直し
+        state = 'align'; alignOkFrames = 0;
+        countdownEl.classList.add('hidden');
+        return;
+      }
+      if (remain > 0) {
+        countdownEl.textContent = Math.ceil(remain);
+        camStatus.textContent = 'まもなく測定をはじめます';
+      } else {
+        countdownEl.classList.add('hidden');
+        state = 'measure';
+        measureStartAt = now;
+        samples = { t: [], r: [], g: [], b: [], skin: [] };
+        progressRow.classList.remove('hidden');
+        camStatus.textContent = '測定中… 動かないでください';
+      }
+    } else if (state === 'measure') {
+      const elapsed = now - measureStartAt;
+      samples.t.push(elapsed);
+      samples.r.push(s.r);
+      samples.g.push(s.g);
+      samples.b.push(s.b);
+      samples.skin.push(s.skinRatio);
+
+      const remain = Math.max(0, MEASURE_SEC - elapsed);
+      ringText.textContent = Math.ceil(remain);
+      ringFg.style.strokeDashoffset = (RING_LEN * remain / MEASURE_SEC).toFixed(1);
+
+      if (elapsed >= MEASURE_SEC) {
+        const data = samples;
+        stopCamera();
+        state = 'idle';
+        renderResult(analyze(data));
+        showScreen('result');
+      }
+    }
+  }
+
+  // ================= 信号処理 =================
+  function resampleUniform(t, v, fs) {
+    const dur = t[t.length - 1] - t[0];
+    const n = Math.floor(dur * fs);
+    const out = new Float64Array(n);
+    let j = 0;
+    for (let i = 0; i < n; i++) {
+      const ti = t[0] + i / fs;
+      while (j < t.length - 2 && t[j + 1] < ti) j++;
+      const t0 = t[j], t1 = t[j + 1];
+      const a = t1 > t0 ? (ti - t0) / (t1 - t0) : 0;
+      out[i] = v[j] * (1 - a) + v[j + 1] * a;
+    }
+    return out;
+  }
+
+  function detrend(x, win) {
+    const n = x.length, out = new Float64Array(n);
+    let sum = 0;
+    const half = Math.floor(win / 2);
+    // 移動平均を引く(簡易ハイパスフィルタ)
+    const cumsum = new Float64Array(n + 1);
+    for (let i = 0; i < n; i++) cumsum[i + 1] = cumsum[i] + x[i];
+    for (let i = 0; i < n; i++) {
+      const a = Math.max(0, i - half), b = Math.min(n, i + half + 1);
+      const mean = (cumsum[b] - cumsum[a]) / (b - a);
+      out[i] = x[i] - mean;
+    }
+    return out;
+  }
+
+  function goertzelPower(x, fs, f) {
+    const n = x.length;
+    const w = 2 * Math.PI * f / fs;
+    const coeff = 2 * Math.cos(w);
+    let s0 = 0, s1 = 0, s2 = 0;
+    for (let i = 0; i < n; i++) {
+      s0 = x[i] + coeff * s1 - s2;
+      s2 = s1; s1 = s0;
+    }
+    return s1 * s1 + s2 * s2 - coeff * s1 * s2;
+  }
+
+  function estimateHeartRate(t, g) {
+    if (t.length < FS * 8) return { bpm: null, snr: 0 };
+    let x = resampleUniform(t, g, FS);
+    x = detrend(x, Math.round(FS * 1.6));
+    // ハミング窓
+    const n = x.length;
+    for (let i = 0; i < n; i++) x[i] *= 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (n - 1));
+
+    // 帯域内のパワースペクトルを走査
+    const freqs = [], powers = [];
+    for (let f = HR_MIN; f <= HR_MAX; f += 0.02) {
+      freqs.push(f);
+      powers.push(goertzelPower(x, FS, f));
+    }
+    let peakI = 0;
+    for (let i = 1; i < powers.length; i++) if (powers[i] > powers[peakI]) peakI = i;
+    const sorted = [...powers].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)] || 1e-12;
+    const snr = powers[peakI] / median;
+    return { bpm: Math.round(freqs[peakI] * 60), snr };
+  }
+
+  // 前半・後半それぞれで推定したBPMの一致度も信頼度の根拠にする
+  // (ノイズだけの信号はランダムなピークを拾うため一致しにくい)
+  function estimateWithAgreement(t, g) {
+    const full = estimateHeartRate(t, g);
+    const n = t.length;
+    const i1 = Math.floor(n * 0.55), i0 = Math.floor(n * 0.45);
+    const a = estimateHeartRate(t.slice(0, i1), g.slice(0, i1));
+    const b = estimateHeartRate(t.slice(i0), g.slice(i0));
+    const agree = (a.bpm && b.bpm) ? Math.abs(a.bpm - b.bpm) : 999;
+    return { bpm: full.bpm, snr: full.snr, agree };
+  }
+
+  function analyze(d) {
+    const hr = estimateWithAgreement(d.t, d.g);
+
+    // 顔色: R/G 比で赤み・青白さを推定
+    const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
+    const mr = mean(d.r), mg = mean(d.g), mb = mean(d.b);
+    const rg = mg > 0 ? mr / mg : 1.3;
+    const bright = (mr + mg + mb) / 3;
+
+    // 測定品質(スペクトルSNR + 前後半のBPM一致度 + 撮影条件)
+    const skinAvg = mean(d.skin);
+    let quality = 'high';
+    if (!hr.bpm || hr.agree > 12 || hr.snr < 5 || skinAvg < 0.45 || bright < 55 || bright > 235) quality = 'low';
+    else if (hr.agree > 5 || hr.snr < 15 || skinAvg < 0.6) quality = 'mid';
+
+    return { bpm: hr.bpm, snr: hr.snr, agree: hr.agree, rg, bright, skinAvg, quality };
+  }
+
+  // ================= 結果表示 =================
+  // R/G比 → ゲージ位置(%)。1.10=青白い 〜 1.30=ふつう 〜 1.55=赤い
+  function rgToPercent(rg) {
+    const p = ((rg - 1.05) / (1.60 - 1.05)) * 100;
+    return Math.max(3, Math.min(97, p));
+  }
+
+  let lastResult = null;
+  const symptomState = { fever: false, head: false, throat: false, chill: false };
+
+  function renderResult(res) {
+    lastResult = res;
+    for (const k in symptomState) symptomState[k] = false;
+    document.querySelectorAll('.symptom').forEach(el => el.classList.remove('on'));
+
+    const reliable = res.quality !== 'low';
+
+    // 心拍数
+    $('m-bpm').innerHTML = (reliable && res.bpm ? res.bpm : '–') + '<span class="unit"> bpm</span>';
+    const bpmTag = $('m-bpm-tag');
+    if (reliable && res.bpm) {
+      if (res.bpm > 100)      bpmTag.innerHTML = '<span class="tag bad">やや速め</span>';
+      else if (res.bpm < 50)  bpmTag.innerHTML = '<span class="tag mid">やや遅め</span>';
+      else                    bpmTag.innerHTML = '<span class="tag good">正常範囲</span>';
+    } else {
+      bpmTag.innerHTML = '<span class="tag mid">測定できず</span>';
+    }
+
+    // 信頼度
+    const qMap = { high: ['高い ◎', 'good'], mid: ['ふつう ○', 'mid'], low: ['低い △', 'bad'] };
+    $('m-quality').textContent = qMap[res.quality][0];
+    $('m-quality-note').textContent = res.quality === 'low'
+      ? '明るい場所で動かずに再測定してください'
+      : '脈波の信号の強さ';
+
+    // 顔色ゲージ
+    $('color-needle').style.left = rgToPercent(res.rg) + '%';
+    let colorDesc, colorFlag = null;
+    if (res.rg >= 1.52) { colorDesc = '顔の赤みが強めです。ほてり・発熱・運動直後・日焼けなどで赤みが出ることがあります。'; colorFlag = 'red'; }
+    else if (res.rg <= 1.12) { colorDesc = '顔色がやや青白い傾向です。冷え・疲れ・貧血ぎみのときに見られることがあります。'; colorFlag = 'pale'; }
+    else { colorDesc = '顔色は標準的な範囲です。'; }
+    $('color-desc').textContent = colorDesc + (res.quality === 'low' ? '(※測定条件が悪いため参考程度)' : '');
+
+    // サイン一覧
+    const findings = [];
+    if (reliable && res.bpm) {
+      if (res.bpm > 100) findings.push('❤️ 安静時としては心拍がやや速めです(' + res.bpm + ' bpm)');
+      if (res.bpm < 50) findings.push('💙 心拍がやや遅めです(' + res.bpm + ' bpm)');
+    }
+    if (colorFlag === 'red') findings.push('🔴 顔の赤みが強めです');
+    if (colorFlag === 'pale') findings.push('🩵 顔色が青白い傾向です');
+    if (res.quality === 'low') findings.push('⚠️ 測定条件が悪く、結果の信頼度が低めです(明るさ・動きを見直して再測定を)');
+
+    const ul = $('findings');
+    ul.innerHTML = '';
+    if (findings.length === 0) {
+      ul.innerHTML = '<li>✅ カメラから読み取れる範囲では、気になるサインは見つかりませんでした</li>';
+    } else {
+      for (const f of findings) {
+        const li = document.createElement('li');
+        li.textContent = f;
+        ul.appendChild(li);
+      }
+    }
+
+    res._signalCount = (reliable && res.bpm && (res.bpm > 100 || res.bpm < 50) ? 1 : 0) + (colorFlag ? 1 : 0);
+    updateVerdict();
+  }
+
+  function updateVerdict() {
+    const res = lastResult;
+    if (!res) return;
+    const sympCount = Object.values(symptomState).filter(Boolean).length;
+    const v = $('verdict');
+    v.classList.remove('ok', 'warn', 'alert');
+
+    if (res.quality === 'low' && sympCount === 0) {
+      v.classList.add('warn');
+      $('verdict-icon').textContent = '🌥';
+      $('verdict-title').textContent = 'うまく測定できませんでした';
+      $('verdict-desc').textContent = '明るい場所で、顔を枠に合わせて動かずに、もういちど測ってみてください。';
+      return;
+    }
+
+    const score = res._signalCount + sympCount;
+    if (score === 0) {
+      v.classList.add('ok');
+      $('verdict-icon').textContent = '😊';
+      $('verdict-title').textContent = '大きなサインは見られませんでした';
+      $('verdict-desc').textContent = 'カメラから読み取れる範囲では、体調不良の目立ったサインはありません。無理せず、こまめな休憩と水分補給を。';
+    } else if (score === 1) {
+      v.classList.add('warn');
+      $('verdict-icon').textContent = '🤔';
+      $('verdict-title').textContent = '気になるサインがあります';
+      $('verdict-desc').textContent = '念のため体温計で検温し、今日はゆっくり休むことをおすすめします。';
+    } else {
+      v.classList.add('alert');
+      $('verdict-icon').textContent = '🌡';
+      $('verdict-title').textContent = '体調不良のサインが複数あります';
+      $('verdict-desc').textContent = '体温計での検温をおすすめします。症状が続く・つらいときは医療機関に相談してください。';
+    }
+  }
+
+  // ================= 画面遷移 =================
+  async function beginMeasure() {
+    $('err-intro').classList.add('hidden');
+    try {
+      await startCamera();
+    } catch (e) {
+      const box = $('err-intro');
+      box.textContent = '📷 カメラを起動できませんでした。' +
+        (e && e.name === 'NotAllowedError'
+          ? ' カメラの使用が許可されていません。Safariの場合はアドレスバー左の「ぁあ」→「Webサイトの設定」からカメラを「許可」にしてください。'
+          : ' ' + (e && e.message ? e.message : ''));
+      box.classList.remove('hidden');
+      return;
+    }
+    state = 'align';
+    alignOkFrames = 0;
+    camWrap.classList.remove('locked');
+    countdownEl.classList.add('hidden');
+    progressRow.classList.add('hidden');
+    ringFg.style.strokeDashoffset = RING_LEN;
+    ringText.textContent = MEASURE_SEC;
+    camStatus.textContent = '顔を枠のなかに合わせてください';
+    showScreen('measure');
+    loop();
+  }
+
+  $('btn-start').addEventListener('click', beginMeasure);
+  $('btn-retry').addEventListener('click', beginMeasure);
+  $('btn-cancel').addEventListener('click', () => { stopCamera(); state = 'idle'; showScreen('intro'); });
+  $('btn-home').addEventListener('click', () => { showScreen('intro'); });
+
+  document.querySelectorAll('.symptom').forEach(el => {
+    el.addEventListener('click', () => {
+      const k = el.dataset.k;
+      symptomState[k] = !symptomState[k];
+      el.classList.toggle('on', symptomState[k]);
+      updateVerdict();
+    });
+  });
+
+  window.addEventListener('pagehide', stopCamera);
+})();
+</script>
+</body>
+</html>
