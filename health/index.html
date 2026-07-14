@@ -262,8 +262,8 @@
     <h2>💡 うまく測るコツ</h2>
     <ul>
       <li>☀️ 明るい場所で(顔に均等に光が当たるように)</li>
-      <li>🎯 顔を枠のなかにおさめて</li>
-      <li>🧘 測定中の約20秒間は動かず、話さないで</li>
+      <li>📱 <b>スマホは机などに立てかけて固定</b>(手持ちのゆれが精度低下のいちばんの原因)</li>
+      <li>🎯 顔を枠のなかにおさめて、20〜35秒動かず・話さずに</li>
       <li>🕶 メガネはOK、前髪はおでこが見えるとより正確</li>
     </ul>
   </div>
@@ -372,7 +372,8 @@
   'use strict';
 
   // ================= 設定 =================
-  const MEASURE_SEC = 20;        // 測定時間
+  const MEASURE_SEC = 20;        // 基本の測定時間
+  const MAX_MEASURE_SEC = 35;    // 信号が弱いときの自動延長上限
   const ALIGN_STABLE_FRAMES = 40; // 顔認識が安定したとみなす連続フレーム数
   const FS = 30;                  // 解析用リサンプリング周波数 (Hz)
   const HR_MIN = 0.7, HR_MAX = 3.3; // 心拍探索帯域 42〜198 bpm
@@ -399,6 +400,8 @@
   let alignOkFrames = 0;
   let countdownEndAt = 0;
   let measureStartAt = 0;
+  let targetSec = MEASURE_SEC;
+  let wakeLock = null;
   let samples = null; // {t:[], r:[], g:[], b:[], skin:[]}
   const work = document.createElement('canvas');
   const wctx = work.getContext('2d', { willReadFrequently: true });
@@ -427,46 +430,58 @@
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
     video.srcObject = null;
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
   }
 
   // ================= フレーム解析 =================
-  // 顔ガイド楕円は画面中央やや上。映像はobject-fit:coverなので、
-  // フレーム中央付近の「おでこ・両ほほ」相当の3領域をサンプリングする。
+  // 画面に表示しているガイド楕円(viewBox 300x400, cx150 cy185 rx95 ry125)を、
+  // object-fit:cover の切り抜きを考慮して実映像の座標系に変換し、
+  // 楕円内側の肌色ピクセルをすべて平均する(領域が広いほどノイズが減る)。
+  const GUIDE = { cx: 150 / 300, cy: 185 / 400, rx: 95 / 300, ry: 125 / 400 };
+  const CONTAINER_ASPECT = 3 / 4;
+
   function sampleFrame() {
     const vw = video.videoWidth, vh = video.videoHeight;
     if (!vw || !vh) return null;
-    const W = 160, H = Math.round(160 * vh / vw);
+    const W = 200, H = Math.round(W * vh / vw);
     work.width = W; work.height = H;
     wctx.drawImage(video, 0, 0, W, H);
 
-    const cx = W / 2, cy = H * 0.46;
-    const u = Math.min(W, H); // 基準スケール
-    const rois = [
-      { x: cx,            y: cy - u * 0.16, r: u * 0.09 }, // おでこ
-      { x: cx - u * 0.13, y: cy + u * 0.05, r: u * 0.08 }, // ほほ(左)
-      { x: cx + u * 0.13, y: cy + u * 0.05, r: u * 0.08 }, // ほほ(右)
-    ];
+    // ガイド楕円 → 映像座標(coverによる切り抜きを補正)
+    const videoAspect = vw / vh;
+    let rxN, ryN;
+    if (videoAspect >= CONTAINER_ASPECT) {
+      // 映像が横長: 高さが一致し左右が切れる
+      rxN = GUIDE.rx * (CONTAINER_ASPECT / videoAspect);
+      ryN = GUIDE.ry;
+    } else {
+      // 映像が縦長: 幅が一致し上下が切れる
+      rxN = GUIDE.rx;
+      ryN = GUIDE.ry * (videoAspect / CONTAINER_ASPECT);
+    }
+    // 輪郭の背景・髪を避けるため少し内側だけを使う
+    const ex = W * 0.5, ey = H * GUIDE.cy;
+    const erx = W * rxN * 0.88, ery = H * ryN * 0.88;
 
+    const x0 = Math.max(0, Math.floor(ex - erx));
+    const y0 = Math.max(0, Math.floor(ey - ery));
+    const x1 = Math.min(W, Math.ceil(ex + erx));
+    const y1 = Math.min(H, Math.ceil(ey + ery));
+    if (x1 <= x0 || y1 <= y0) return null;
+
+    const data = wctx.getImageData(x0, y0, x1 - x0, y1 - y0).data;
     let sr = 0, sg = 0, sb = 0, skinN = 0, totalN = 0;
-    for (const roi of rois) {
-      const x0 = Math.max(0, Math.round(roi.x - roi.r));
-      const y0 = Math.max(0, Math.round(roi.y - roi.r));
-      const w = Math.min(W - x0, Math.round(roi.r * 2));
-      const h = Math.min(H - y0, Math.round(roi.r * 2));
-      if (w <= 0 || h <= 0) continue;
-      const data = wctx.getImageData(x0, y0, w, h).data;
-      const r2 = roi.r * roi.r;
-      for (let yy = 0; yy < h; yy++) {
-        for (let xx = 0; xx < w; xx++) {
-          const dx = x0 + xx - roi.x, dy = y0 + yy - roi.y;
-          if (dx * dx + dy * dy > r2) continue;
-          totalN++;
-          const i = (yy * w + xx) * 4;
-          const r = data[i], g = data[i + 1], b = data[i + 2];
-          // ゆるい肌色フィルタ(髪・背景・目を除外)
-          if (r > 55 && r > g && r > b && (r - b) > 8 && g > b * 0.7) {
-            sr += r; sg += g; sb += b; skinN++;
-          }
+    for (let yy = y0; yy < y1; yy++) {
+      const ny = (yy - ey) / ery;
+      for (let xx = x0; xx < x1; xx++) {
+        const nx = (xx - ex) / erx;
+        if (nx * nx + ny * ny > 1) continue;
+        totalN++;
+        const i = ((yy - y0) * (x1 - x0) + (xx - x0)) * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        // ゆるい肌色フィルタ(髪・背景・目を除外)
+        if (r > 55 && r > g && r > b && (r - b) > 8 && g > b * 0.7) {
+          sr += r; sg += g; sb += b; skinN++;
         }
       }
     }
@@ -519,8 +534,11 @@
         countdownEl.classList.add('hidden');
         state = 'measure';
         measureStartAt = now;
+        targetSec = MEASURE_SEC;
         samples = { t: [], r: [], g: [], b: [], skin: [] };
         progressRow.classList.remove('hidden');
+        document.querySelector('#progress-row .progress-label').innerHTML =
+          '測定中… そのまま動かないでください。<br>皮膚の色の変化から脈を読み取っています。';
         camStatus.textContent = '測定中… 動かないでください';
       }
     } else if (state === 'measure') {
@@ -531,16 +549,24 @@
       samples.b.push(s.b);
       samples.skin.push(s.skinRatio);
 
-      const remain = Math.max(0, MEASURE_SEC - elapsed);
+      const remain = Math.max(0, targetSec - elapsed);
       ringText.textContent = Math.ceil(remain);
-      ringFg.style.strokeDashoffset = (RING_LEN * remain / MEASURE_SEC).toFixed(1);
+      ringFg.style.strokeDashoffset = (RING_LEN * remain / targetSec).toFixed(1);
 
-      if (elapsed >= MEASURE_SEC) {
-        const data = samples;
-        stopCamera();
-        state = 'idle';
-        renderResult(analyze(data));
-        showScreen('result');
+      if (elapsed >= targetSec) {
+        const res = analyze(samples);
+        if (res.quality === 'low' && targetSec < MAX_MEASURE_SEC) {
+          // 信号が弱いときは自動で少し延長して精度を稼ぐ
+          targetSec = Math.min(targetSec + 6, MAX_MEASURE_SEC);
+          camStatus.textContent = '脈の信号が弱いため延長中… そのまま動かないで';
+          document.querySelector('#progress-row .progress-label').innerHTML =
+            '精度を上げるため測定を延長しています。<br>そのまま動かずにお待ちください。';
+        } else {
+          stopCamera();
+          state = 'idle';
+          renderResult(res);
+          showScreen('result');
+        }
       }
     }
   }
@@ -561,69 +587,160 @@
     return out;
   }
 
-  function detrend(x, win) {
+  // 移動平均で「割る」正規化(自動露出のゲイン変動は乗算的なので減算より強い)
+  function normDiv(x, win) {
     const n = x.length, out = new Float64Array(n);
-    let sum = 0;
     const half = Math.floor(win / 2);
-    // 移動平均を引く(簡易ハイパスフィルタ)
     const cumsum = new Float64Array(n + 1);
     for (let i = 0; i < n; i++) cumsum[i + 1] = cumsum[i] + x[i];
     for (let i = 0; i < n; i++) {
       const a = Math.max(0, i - half), b = Math.min(n, i + half + 1);
       const mean = (cumsum[b] - cumsum[a]) / (b - a);
-      out[i] = x[i] - mean;
+      out[i] = mean > 1e-9 ? x[i] / mean - 1 : 0;
     }
     return out;
   }
 
-  function goertzelPower(x, fs, f) {
-    const n = x.length;
+  function stddev(x) {
+    let m = 0;
+    for (let i = 0; i < x.length; i++) m += x[i];
+    m /= x.length;
+    let v = 0;
+    for (let i = 0; i < x.length; i++) v += (x[i] - m) * (x[i] - m);
+    return Math.sqrt(v / x.length);
+  }
+
+  // CHROM法 (de Haan & Jeanne 2013): 色度の差信号で
+  // 照明変動・手ぶれの同相ノイズを打ち消す。実環境での定番手法
+  function chromSignal(rn, gn, bn) {
+    const n = rn.length;
+    const xs = new Float64Array(n), ys = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      xs[i] = 3 * rn[i] - 2 * gn[i];
+      ys[i] = 1.5 * rn[i] + gn[i] - 1.5 * bn[i];
+    }
+    const sy = stddev(ys);
+    const a = sy > 1e-12 ? stddev(xs) / sy : 0;
+    const out = new Float64Array(n);
+    for (let i = 0; i < n; i++) out[i] = xs[i] - a * ys[i];
+    return out;
+  }
+
+  function goertzelPower(x, off, len, fs, f) {
     const w = 2 * Math.PI * f / fs;
     const coeff = 2 * Math.cos(w);
     let s0 = 0, s1 = 0, s2 = 0;
-    for (let i = 0; i < n; i++) {
-      s0 = x[i] + coeff * s1 - s2;
+    for (let i = 0; i < len; i++) {
+      // ハミング窓をかけながら評価
+      const v = x[off + i] * (0.54 - 0.46 * Math.cos(2 * Math.PI * i / (len - 1)));
+      s0 = v + coeff * s1 - s2;
       s2 = s1; s1 = s0;
     }
     return s1 * s1 + s2 * s2 - coeff * s1 * s2;
   }
 
-  function estimateHeartRate(t, g) {
-    if (t.length < FS * 8) return { bpm: null, snr: 0 };
-    let x = resampleUniform(t, g, FS);
-    x = detrend(x, Math.round(FS * 1.6));
-    // ハミング窓
-    const n = x.length;
-    for (let i = 0; i < n; i++) x[i] *= 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (n - 1));
-
-    // 帯域内のパワースペクトルを走査
-    const freqs = [], powers = [];
-    for (let f = HR_MIN; f <= HR_MAX; f += 0.02) {
-      freqs.push(f);
-      powers.push(goertzelPower(x, FS, f));
-    }
+  function spectrumPeak(powers) {
     let peakI = 0;
     for (let i = 1; i < powers.length; i++) if (powers[i] > powers[peakI]) peakI = i;
-    const sorted = [...powers].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)] || 1e-12;
-    const snr = powers[peakI] / median;
-    return { bpm: Math.round(freqs[peakI] * 60), snr };
+    return peakI;
   }
 
-  // 前半・後半それぞれで推定したBPMの一致度も信頼度の根拠にする
-  // (ノイズだけの信号はランダムなピークを拾うため一致しにくい)
-  function estimateWithAgreement(t, g) {
-    const full = estimateHeartRate(t, g);
-    const n = t.length;
-    const i1 = Math.floor(n * 0.55), i0 = Math.floor(n * 0.45);
-    const a = estimateHeartRate(t.slice(0, i1), g.slice(0, i1));
-    const b = estimateHeartRate(t.slice(i0), g.slice(i0));
-    const agree = (a.bpm && b.bpm) ? Math.abs(a.bpm - b.bpm) : 999;
-    return { bpm: full.bpm, snr: full.snr, agree };
+  // スペクトル白色化: log-log直線フィットで 1/f 系トレンドを除去する。
+  // 手ぶれ由来の低周波ノイズは 1/f² 型で帯域下端(42〜60bpm)に偽ピークを
+  // 作るが、トレンドに沿うため白色化で消える。本物の脈は床から突き出た
+  // 局所ピークとして残る
+  function whitenSpectrum(p, freqs) {
+    const n = p.length;
+    const lx = new Float64Array(n), ly = new Float64Array(n);
+    for (let i = 0; i < n; i++) { lx[i] = Math.log(freqs[i]); ly[i] = Math.log(p[i] + 1e-20); }
+    let use = null, a = 0, b = 0;
+    for (let pass = 0; pass < 2; pass++) {
+      let sx = 0, sy = 0, sxx = 0, sxy = 0, m = 0;
+      for (let i = 0; i < n; i++) {
+        if (use && !use[i]) continue;
+        sx += lx[i]; sy += ly[i]; sxx += lx[i] * lx[i]; sxy += lx[i] * ly[i]; m++;
+      }
+      const denom = m * sxx - sx * sx;
+      b = Math.abs(denom) > 1e-12 ? (m * sxy - sx * sy) / denom : 0;
+      a = (sy - b * sx) / m;
+      if (pass === 0) {
+        // ピーク自身がトレンドを持ち上げないよう、残差上位20%を除いて再フィット
+        const resid = new Float64Array(n);
+        for (let i = 0; i < n; i++) resid[i] = ly[i] - (a + b * lx[i]);
+        const cut = [...resid].sort((x, y) => x - y)[Math.floor(n * 0.8)];
+        use = new Uint8Array(n);
+        for (let i = 0; i < n; i++) use[i] = resid[i] <= cut ? 1 : 0;
+      }
+    }
+    const out = new Float64Array(n);
+    for (let i = 0; i < n; i++) out[i] = Math.exp(ly[i] - (a + b * lx[i]));
+    return out;
+  }
+
+  // Welch法: 50%長の窓を3つ(50%オーバーラップ)取り、窓ごとに白色化した
+  // スペクトルを平均してノイズを抑える。各窓のピークが平均スペクトルの
+  // ピークと一致した数(consist)を信頼度の根拠にする
+  function welchEstimate(x, fs) {
+    const n = x.length;
+    if (n < fs * 8) return { bpm: null, snr: 0, consist: 0 };
+    const winLen = Math.floor(n / 2);
+    const starts = [0, Math.floor(n / 4), n - winLen];
+
+    const freqs = [];
+    for (let f = HR_MIN; f <= HR_MAX; f += 0.02) freqs.push(f);
+    const combined = new Float64Array(freqs.length);
+    const windowPeaks = [];
+    let winCount = 0;
+
+    for (const off of starts) {
+      const p = new Float64Array(freqs.length);
+      for (let i = 0; i < freqs.length; i++) p[i] = goertzelPower(x, off, winLen, fs, freqs[i]);
+      const w = whitenSpectrum(p, freqs);
+      for (let i = 0; i < freqs.length; i++) combined[i] += w[i];
+      windowPeaks.push(freqs[spectrumPeak(w)] * 60);
+      winCount++;
+    }
+    if (!winCount) return { bpm: null, snr: 0, consist: 0 };
+
+    let peakI = spectrumPeak(combined);
+    // 高調波補正: 半分の周波数にも強いピークがあればそちらが基本波
+    const halfF = freqs[peakI] / 2;
+    if (halfF >= HR_MIN) {
+      const halfI = Math.round((halfF - HR_MIN) / 0.02);
+      let localMax = halfI;
+      for (let i = Math.max(0, halfI - 3); i <= Math.min(freqs.length - 1, halfI + 3); i++) {
+        if (combined[i] > combined[localMax]) localMax = i;
+      }
+      if (combined[localMax] > combined[peakI] * 0.65) peakI = localMax;
+    }
+
+    const bpm = Math.round(freqs[peakI] * 60);
+    // 白色化後の中央値は約1なので、snr = ノイズ床の何倍か
+    const snr = combined[peakI] / winCount;
+    let consist = 0;
+    for (const wp of windowPeaks) if (Math.abs(wp - bpm) <= 8 || Math.abs(wp / 2 - bpm) <= 8) consist++;
+    return { bpm, snr, consist };
+  }
+
+  function estimatePulse(d) {
+    if (d.t.length < 60 || (d.t[d.t.length - 1] - d.t[0]) < 8) return { bpm: null, snr: 0, consist: 0 };
+    const win = Math.round(FS * 1.6);
+    const r = normDiv(resampleUniform(d.t, d.r, FS), win);
+    const g = normDiv(resampleUniform(d.t, d.g, FS), win);
+    const b = normDiv(resampleUniform(d.t, d.b, FS), win);
+    // 緑チャンネル法とCHROM法の両方を試し、信号が強い方を採用。
+    // 独立した2方式が同じBPMを指すことは本物の脈である強い証拠になる
+    // (ノイズは方式ごとに別のランダムなピークを拾う)
+    const eG = welchEstimate(g, FS);
+    const eC = welchEstimate(chromSignal(r, g, b), FS);
+    const best = eC.snr >= eG.snr ? eC : eG;
+    const methodAgree = !!(eG.bpm && eC.bpm &&
+      (Math.abs(eG.bpm - eC.bpm) <= 6 || Math.abs(eG.bpm - eC.bpm * 2) <= 6 || Math.abs(eG.bpm * 2 - eC.bpm) <= 6));
+    return { bpm: best.bpm, snr: best.snr, consist: best.consist, methodAgree };
   }
 
   function analyze(d) {
-    const hr = estimateWithAgreement(d.t, d.g);
+    const hr = estimatePulse(d);
 
     // 顔色: R/G 比で赤み・青白さを推定
     const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
@@ -631,13 +748,22 @@
     const rg = mg > 0 ? mr / mg : 1.3;
     const bright = (mr + mg + mb) / 3;
 
-    // 測定品質(スペクトルSNR + 前後半のBPM一致度 + 撮影条件)
+    // 測定品質(平均スペクトルSNR + 窓ごとのピーク一致数 + 撮影条件)
     const skinAvg = mean(d.skin);
-    let quality = 'high';
-    if (!hr.bpm || hr.agree > 12 || hr.snr < 5 || skinAvg < 0.45 || bright < 55 || bright > 235) quality = 'low';
-    else if (hr.agree > 5 || hr.snr < 15 || skinAvg < 0.6) quality = 'mid';
+    const condOk = skinAvg >= 0.35 && bright >= 55 && bright <= 235;
+    let quality = 'low';
+    if (hr.bpm && condOk) {
+      if (hr.methodAgree && hr.consist >= 2 && hr.snr >= 8) quality = 'high';
+      else if ((hr.methodAgree && hr.consist >= 1 && hr.snr >= 5) ||
+               (hr.consist >= 3 && hr.snr >= 15)) quality = 'mid';
+    }
+    // 手ぶれの偽ピークは帯域下端(〜58bpm)に出やすいので、
+    // 低BPMの推定は特に強い信号のときだけ信頼する
+    if (hr.bpm && hr.bpm < 58 && hr.snr < 15 && quality !== 'low') {
+      quality = quality === 'high' ? 'mid' : 'low';
+    }
 
-    return { bpm: hr.bpm, snr: hr.snr, agree: hr.agree, rg, bright, skinAvg, quality };
+    return { bpm: hr.bpm, snr: hr.snr, consist: hr.consist, methodAgree: hr.methodAgree, rg, bright, skinAvg, quality };
   }
 
   // ================= 結果表示 =================
@@ -672,7 +798,7 @@
     const qMap = { high: ['高い ◎', 'good'], mid: ['ふつう ○', 'mid'], low: ['低い △', 'bad'] };
     $('m-quality').textContent = qMap[res.quality][0];
     $('m-quality-note').textContent = res.quality === 'low'
-      ? '明るい場所で動かずに再測定してください'
+      ? 'スマホを固定して明るい場所で再測定を'
       : '脈波の信号の強さ';
 
     // 顔色ゲージ
@@ -720,7 +846,7 @@
       v.classList.add('warn');
       $('verdict-icon').textContent = '🌥';
       $('verdict-title').textContent = 'うまく測定できませんでした';
-      $('verdict-desc').textContent = '明るい場所で、顔を枠に合わせて動かずに、もういちど測ってみてください。';
+      $('verdict-desc').textContent = 'スマホを机などに立てかけて固定し、明るい場所で顔に光が当たる向きにして、もういちど測ってみてください。手持ちのゆれが失敗のいちばんの原因です。';
       return;
     }
 
@@ -757,6 +883,10 @@
       box.classList.remove('hidden');
       return;
     }
+    // 測定中に画面が暗くならないようにする(未対応ブラウザは無視)
+    if (navigator.wakeLock && navigator.wakeLock.request) {
+      navigator.wakeLock.request('screen').then(l => { wakeLock = l; }).catch(() => {});
+    }
     state = 'align';
     alignOkFrames = 0;
     camWrap.classList.remove('locked');
@@ -784,6 +914,9 @@
   });
 
   window.addEventListener('pagehide', stopCamera);
+
+  // テスト用フック(合成データで解析パイプラインを検証するため)
+  window.__hc = { estimatePulse, analyze };
 })();
 </script>
 </body>
