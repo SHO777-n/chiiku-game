@@ -88,6 +88,7 @@
   }
   #qMode { font-size:12px; font-weight:bold; color:#888; margin-bottom:6px; }
   #qMain { font-size:clamp(30px,9vw,46px); font-weight:bold; color:#222; line-height:1.2; word-break:break-word; }
+  #qKana { font-size:clamp(15px,4.5vw,19px); font-weight:bold; color:#4a6cf7; margin-top:4px; min-height:24px; }
   #qSub { font-size:15px; color:#666; margin-top:6px; min-height:20px; }
   #speakBtn {
     border:none; background:#e3f2fd; border-radius:50%; width:52px; height:52px; font-size:26px; cursor:pointer;
@@ -213,6 +214,7 @@
       <div id="qCard">
         <div id="qMode"></div>
         <div id="qMain"></div>
+        <div id="qKana"></div>
         <div id="qSub"></div>
         <button id="speakBtn" onclick="replayAudio()">🔊</button>
       </div>
@@ -260,123 +262,123 @@
    間隔反復(SRS)× 4モード × ごほうびで「めちゃくちゃ覚える」
    ========================================================= */
 
-// ---------- 単語データ [英語, 日本語] ----------
+// ---------- 単語データ [英語, 日本語, カタカナ読み] ----------
 const CATS = [
 {n:'あいさつ・会話',e:'👋',w:[
-['hello','こんにちは'],['hi','やあ'],['goodbye','さようなら'],['thanks','ありがとう'],
-['please','おねがいします'],['sorry','ごめんなさい'],['excuse me','すみません'],['yes','はい'],
-['no','いいえ'],['okay','いいよ、オーケー'],['welcome','ようこそ'],['nice','すてきな'],
-['meet','会う'],['friend','ともだち'],['name','なまえ'],['question','しつもん'],
-['answer','こたえ、こたえる'],['speak','話す'],['say','言う'],['listen','(注意して)聞く'],
-['hear','聞こえる'],['understand','わかる、理解する'],['know','知っている'],['think','考える、思う'],
-['talk','おしゃべりする'],['ask','たずねる'],['tell','つたえる'],['again','もういちど'],
-['together','いっしょに'],['maybe','たぶん']]},
+['hello','こんにちは','ハロー'],['hi','やあ','ハイ'],['goodbye','さようなら','グッバイ'],['thanks','ありがとう','サンクス'],
+['please','おねがいします','プリーズ'],['sorry','ごめんなさい','ソーリー'],['excuse me','すみません','エクスキューズ ミー'],['yes','はい','イエス'],
+['no','いいえ','ノー'],['okay','いいよ、オーケー','オーケイ'],['welcome','ようこそ','ウェルカム'],['nice','すてきな','ナイス'],
+['meet','会う','ミート'],['friend','ともだち','フレンド'],['name','なまえ','ネーム'],['question','しつもん','クエスチョン'],
+['answer','こたえ、こたえる','アンサー'],['speak','話す','スピーク'],['say','言う','セイ'],['listen','(注意して)聞く','リッスン'],
+['hear','聞こえる','ヒア'],['understand','わかる、理解する','アンダースタンド'],['know','知っている','ノウ'],['think','考える、思う','シンク'],
+['talk','おしゃべりする','トーク'],['ask','たずねる','アスク'],['tell','つたえる','テル'],['again','もういちど','アゲイン'],
+['together','いっしょに','トゥギャザー'],['maybe','たぶん','メイビー']]},
 {n:'うごき(動詞)',e:'🏃',w:[
-['go','行く'],['come','来る'],['run','走る'],['walk','歩く'],
-['jump','とぶ、ジャンプする'],['eat','食べる'],['drink','飲む'],['sleep','ねむる'],
-['wake up','目をさます'],['sit','すわる'],['stand','立つ'],['open','あける'],
-['close','しめる'],['make','つくる'],['use','つかう'],['take','取る、持っていく'],
-['give','あげる'],['get','もらう、手に入れる'],['put','おく'],['look','見る、目を向ける'],
-['watch','(テレビなどを)見る'],['read','読む'],['write','書く'],['play','遊ぶ'],
-['work','はたらく'],['study','勉強する'],['wash','あらう'],['clean','そうじする'],
-['buy','買う'],['wait','待つ']]},
+['go','行く','ゴー'],['come','来る','カム'],['run','走る','ラン'],['walk','歩く','ウォーク'],
+['jump','とぶ、ジャンプする','ジャンプ'],['eat','食べる','イート'],['drink','飲む','ドリンク'],['sleep','ねむる','スリープ'],
+['wake up','目をさます','ウェイクアップ'],['sit','すわる','シット'],['stand','立つ','スタンド'],['open','あける','オープン'],
+['close','しめる','クローズ'],['make','つくる','メイク'],['use','つかう','ユーズ'],['take','取る、持っていく','テイク'],
+['give','あげる','ギブ'],['get','もらう、手に入れる','ゲット'],['put','おく','プット'],['look','見る、目を向ける','ルック'],
+['watch','(テレビなどを)見る','ウォッチ'],['read','読む','リード'],['write','書く','ライト'],['play','遊ぶ','プレイ'],
+['work','はたらく','ワーク'],['study','勉強する','スタディ'],['wash','あらう','ウォッシュ'],['clean','そうじする','クリーン'],
+['buy','買う','バイ'],['wait','待つ','ウェイト']]},
 {n:'たべもの',e:'🍎',w:[
-['apple','りんご'],['orange','オレンジ'],['banana','バナナ'],['grape','ぶどう'],
-['strawberry','いちご'],['peach','もも'],['melon','メロン'],['bread','パン'],
-['rice','ごはん、お米'],['egg','たまご'],['milk','ぎゅうにゅう'],['water','水'],
-['tea','おちゃ'],['coffee','コーヒー'],['juice','ジュース'],['meat','肉'],
-['chicken','とり肉、にわとり'],['fish','さかな'],['vegetable','やさい'],['salad','サラダ'],
-['soup','スープ'],['cake','ケーキ'],['cookie','クッキー'],['chocolate','チョコレート'],
-['ice cream','アイスクリーム'],['cheese','チーズ'],['butter','バター'],['sugar','さとう'],
-['salt','しお'],['breakfast','あさごはん']]},
+['apple','りんご','アップル'],['orange','オレンジ','オレンジ'],['banana','バナナ','バナナ'],['grape','ぶどう','グレープ'],
+['strawberry','いちご','ストロベリー'],['peach','もも','ピーチ'],['melon','メロン','メロン'],['bread','パン','ブレッド'],
+['rice','ごはん、お米','ライス'],['egg','たまご','エッグ'],['milk','ぎゅうにゅう','ミルク'],['water','水','ウォーター'],
+['tea','おちゃ','ティー'],['coffee','コーヒー','コーフィー'],['juice','ジュース','ジュース'],['meat','肉','ミート'],
+['chicken','とり肉、にわとり','チキン'],['fish','さかな','フィッシュ'],['vegetable','やさい','ベジタブル'],['salad','サラダ','サラダ'],
+['soup','スープ','スープ'],['cake','ケーキ','ケイク'],['cookie','クッキー','クッキー'],['chocolate','チョコレート','チョコレット'],
+['ice cream','アイスクリーム','アイスクリーム'],['cheese','チーズ','チーズ'],['butter','バター','バター'],['sugar','さとう','シュガー'],
+['salt','しお','ソルト'],['breakfast','あさごはん','ブレックファスト']]},
 {n:'きもち・ようす',e:'😊',w:[
-['happy','うれしい'],['sad','かなしい'],['angry','おこっている'],['fun','たのしい'],
-['tired','つかれた'],['sleepy','ねむい'],['hungry','おなかがすいた'],['thirsty','のどがかわいた'],
-['scared','こわがっている'],['surprised','おどろいた'],['excited','わくわくした'],['bored','たいくつした'],
-['good','よい'],['bad','わるい'],['big','大きい'],['small','小さい'],
-['hot','あつい'],['cold','つめたい、さむい'],['new','あたらしい'],['old','ふるい'],
-['fast','(スピードが)はやい'],['slow','おそい'],['easy','かんたんな'],['difficult','むずかしい'],
-['strong','つよい'],['weak','よわい'],['cute','かわいい'],['beautiful','うつくしい'],
-['busy','いそがしい'],['kind','やさしい、親切な']]},
+['happy','うれしい','ハッピー'],['sad','かなしい','サッド'],['angry','おこっている','アングリー'],['fun','たのしい','ファン'],
+['tired','つかれた','タイアード'],['sleepy','ねむい','スリーピー'],['hungry','おなかがすいた','ハングリー'],['thirsty','のどがかわいた','サースティ'],
+['scared','こわがっている','スケアード'],['surprised','おどろいた','サプライズド'],['excited','わくわくした','エキサイテッド'],['bored','たいくつした','ボアード'],
+['good','よい','グッド'],['bad','わるい','バッド'],['big','大きい','ビッグ'],['small','小さい','スモール'],
+['hot','あつい','ホット'],['cold','つめたい、さむい','コールド'],['new','あたらしい','ニュー'],['old','ふるい','オールド'],
+['fast','(スピードが)はやい','ファスト'],['slow','おそい','スロー'],['easy','かんたんな','イージー'],['difficult','むずかしい','ディフィカルト'],
+['strong','つよい','ストロング'],['weak','よわい','ウィーク'],['cute','かわいい','キュート'],['beautiful','うつくしい','ビューティフル'],
+['busy','いそがしい','ビジー'],['kind','やさしい、親切な','カインド']]},
 {n:'いえ・くらし',e:'🏠',w:[
-['house','いえ'],['room','へや'],['kitchen','だいどころ'],['bathroom','おふろば、トイレ'],
-['bedroom','しんしつ'],['door','ドア'],['window','まど'],['table','テーブル'],
-['chair','いす'],['bed','ベッド'],['sofa','ソファ'],['desk','つくえ'],
-['lamp','ランプ、電気スタンド'],['clock','とけい'],['phone','でんわ'],['television','テレビ'],
-['computer','コンピューター'],['book','本'],['cup','コップ'],['dish','おさら'],
-['spoon','スプーン'],['fork','フォーク'],['knife','ナイフ'],['towel','タオル'],
-['soap','せっけん'],['toothbrush','はブラシ'],['umbrella','かさ'],['key','かぎ'],
-['bag','かばん'],['clothes','ふく']]},
+['house','いえ','ハウス'],['room','へや','ルーム'],['kitchen','だいどころ','キッチン'],['bathroom','おふろば、トイレ','バスルーム'],
+['bedroom','しんしつ','ベッドルーム'],['door','ドア','ドア'],['window','まど','ウィンドウ'],['table','テーブル','テイブル'],
+['chair','いす','チェア'],['bed','ベッド','ベッド'],['sofa','ソファ','ソウファ'],['desk','つくえ','デスク'],
+['lamp','ランプ、電気スタンド','ランプ'],['clock','とけい','クロック'],['phone','でんわ','フォン'],['television','テレビ','テレビジョン'],
+['computer','コンピューター','コンピューター'],['book','本','ブック'],['cup','コップ','カップ'],['dish','おさら','ディッシュ'],
+['spoon','スプーン','スプーン'],['fork','フォーク','フォーク'],['knife','ナイフ','ナイフ'],['towel','タオル','タウエル'],
+['soap','せっけん','ソープ'],['toothbrush','はブラシ','トゥースブラシ'],['umbrella','かさ','アンブレラ'],['key','かぎ','キー'],
+['bag','かばん','バッグ'],['clothes','ふく','クロウズ']]},
 {n:'まち・のりもの',e:'🚌',w:[
-['car','くるま'],['bus','バス'],['train','でんしゃ'],['bicycle','じてんしゃ'],
-['airplane','ひこうき'],['ship','ふね'],['taxi','タクシー'],['station','えき'],
-['airport','くうこう'],['road','どうろ'],['bridge','はし(橋)'],['park','こうえん'],
-['town','まち'],['city','都市、大きなまち'],['shop','みせ'],['restaurant','レストラン'],
-['hospital','びょういん'],['library','としょかん'],['museum','はくぶつかん'],['zoo','どうぶつえん'],
-['hotel','ホテル'],['bank','ぎんこう'],['post office','ゆうびんきょく'],['police','けいさつ'],
-['fire station','しょうぼうしょ'],['map','ちず'],['street','とおり'],['corner','かど'],
-['building','たてもの'],['elevator','エレベーター']]},
+['car','くるま','カー'],['bus','バス','バス'],['train','でんしゃ','トレイン'],['bicycle','じてんしゃ','バイシクル'],
+['airplane','ひこうき','エアプレイン'],['ship','ふね','シップ'],['taxi','タクシー','タクシー'],['station','えき','ステーション'],
+['airport','くうこう','エアポート'],['road','どうろ','ロード'],['bridge','はし(橋)','ブリッジ'],['park','こうえん','パーク'],
+['town','まち','タウン'],['city','都市、大きなまち','シティ'],['shop','みせ','ショップ'],['restaurant','レストラン','レストラン'],
+['hospital','びょういん','ホスピタル'],['library','としょかん','ライブラリー'],['museum','はくぶつかん','ミュージアム'],['zoo','どうぶつえん','ズー'],
+['hotel','ホテル','ホウテル'],['bank','ぎんこう','バンク'],['post office','ゆうびんきょく','ポスト オフィス'],['police','けいさつ','ポリス'],
+['fire station','しょうぼうしょ','ファイア ステーション'],['map','ちず','マップ'],['street','とおり','ストリート'],['corner','かど','コーナー'],
+['building','たてもの','ビルディング'],['elevator','エレベーター','エレベイター']]},
 {n:'しぜん・てんき',e:'🌤️',w:[
-['sun','たいよう'],['moon','つき(月)'],['star','ほし'],['sky','そら'],
-['cloud','くも(雲)'],['rain','あめ(雨)'],['snow','ゆき'],['wind','かぜ(風)'],
-['storm','あらし'],['rainbow','にじ'],['sea','うみ'],['river','かわ(川)'],
-['lake','みずうみ'],['mountain','やま'],['forest','もり'],['tree','木'],
-['flower','はな(花)'],['grass','くさ'],['leaf','はっぱ'],['stone','いし'],
-['sand','すな'],['island','しま'],['beach','はまべ、ビーチ'],['weather','てんき'],
-['sunny','はれた'],['cloudy','くもりの'],['rainy','雨ふりの'],['warm','あたたかい'],
-['cool','すずしい'],['spring','はる']]},
+['sun','たいよう','サン'],['moon','つき(月)','ムーン'],['star','ほし','スター'],['sky','そら','スカイ'],
+['cloud','くも(雲)','クラウド'],['rain','あめ(雨)','レイン'],['snow','ゆき','スノー'],['wind','かぜ(風)','ウィンド'],
+['storm','あらし','ストーム'],['rainbow','にじ','レインボー'],['sea','うみ','シー'],['river','かわ(川)','リバー'],
+['lake','みずうみ','レイク'],['mountain','やま','マウンテン'],['forest','もり','フォレスト'],['tree','木','ツリー'],
+['flower','はな(花)','フラワー'],['grass','くさ','グラス'],['leaf','はっぱ','リーフ'],['stone','いし','ストーン'],
+['sand','すな','サンド'],['island','しま','アイランド'],['beach','はまべ、ビーチ','ビーチ'],['weather','てんき','ウェザー'],
+['sunny','はれた','サニー'],['cloudy','くもりの','クラウディ'],['rainy','雨ふりの','レイニー'],['warm','あたたかい','ウォーム'],
+['cool','すずしい','クール'],['spring','はる','スプリング']]},
 {n:'からだ・けんこう',e:'💪',w:[
-['head','あたま'],['face','かお'],['eye','め(目)'],['ear','みみ'],
-['nose','はな(鼻)'],['mouth','くち'],['tooth','は(歯)'],['hair','かみの毛'],
-['neck','くび'],['shoulder','かた(肩)'],['arm','うで'],['hand','て(手)'],
-['finger','ゆび'],['leg','あし(脚)'],['foot','あし(足首から先)'],['knee','ひざ'],
-['stomach','おなか、い(胃)'],['back','せなか'],['heart','しんぞう、こころ'],['body','からだ'],
-['sick','びょうきの'],['hurt','いたむ、けがをする'],['medicine','くすり'],['doctor','いしゃ'],
-['nurse','かんごし'],['fever','ねつ(熱)'],['cough','せき(咳)'],['cold(病気)','かぜ(病気)'],
-['healthy','けんこうな'],['exercise','うんどう']]},
+['head','あたま','ヘッド'],['face','かお','フェイス'],['eye','め(目)','アイ'],['ear','みみ','イヤー'],
+['nose','はな(鼻)','ノウズ'],['mouth','くち','マウス'],['tooth','は(歯)','トゥース'],['hair','かみの毛','ヘア'],
+['neck','くび','ネック'],['shoulder','かた(肩)','ショルダー'],['arm','うで','アーム'],['hand','て(手)','ハンド'],
+['finger','ゆび','フィンガー'],['leg','あし(脚)','レッグ'],['foot','あし(足首から先)','フット'],['knee','ひざ','ニー'],
+['stomach','おなか、い(胃)','ストマック'],['back','せなか','バック'],['heart','しんぞう、こころ','ハート'],['body','からだ','ボディ'],
+['sick','びょうきの','シック'],['hurt','いたむ、けがをする','ハート'],['medicine','くすり','メディスン'],['doctor','いしゃ','ドクター'],
+['nurse','かんごし','ナース'],['fever','ねつ(熱)','フィーバー'],['cough','せき(咳)','コフ'],['cold(病気)','かぜ(病気)','コールド'],
+['healthy','けんこうな','ヘルシー'],['exercise','うんどう','エクササイズ']]},
 {n:'ひと・かぞく',e:'👨‍👩‍👧',w:[
-['family','かぞく'],['father','おとうさん'],['mother','おかあさん'],['brother','おにいさん・おとうと'],
-['sister','おねえさん・いもうと'],['grandfather','おじいさん'],['grandmother','おばあさん'],['baby','あかちゃん'],
-['child','こども'],['boy','おとこのこ'],['girl','おんなのこ'],['man','おとこのひと'],
-['woman','おんなのひと'],['people','ひとびと'],['teacher','せんせい'],['student','せいと'],
-['police officer','けいさつかん'],['singer','かしゅ'],['driver','うんてんしゅ'],['farmer','のうか'],
-['neighbor','となりのひと、ごきんじょさん'],['classmate','クラスメイト'],['everyone','みんな'],['someone','だれか'],
-['birthday','たんじょうび'],['party','パーティー'],['present','プレゼント'],['letter','てがみ'],
-['smile','えがお、ほほえむ'],['love','あいする、だいすき']]},
+['family','かぞく','ファミリー'],['father','おとうさん','ファーザー'],['mother','おかあさん','マザー'],['brother','おにいさん・おとうと','ブラザー'],
+['sister','おねえさん・いもうと','シスター'],['grandfather','おじいさん','グランドファーザー'],['grandmother','おばあさん','グランドマザー'],['baby','あかちゃん','ベイビー'],
+['child','こども','チャイルド'],['boy','おとこのこ','ボーイ'],['girl','おんなのこ','ガール'],['man','おとこのひと','マン'],
+['woman','おんなのひと','ウーマン'],['people','ひとびと','ピープル'],['teacher','せんせい','ティーチャー'],['student','せいと','ステューデント'],
+['police officer','けいさつかん','ポリス オフィサー'],['singer','かしゅ','シンガー'],['driver','うんてんしゅ','ドライバー'],['farmer','のうか','ファーマー'],
+['neighbor','となりのひと、ごきんじょさん','ネイバー'],['classmate','クラスメイト','クラスメイト'],['everyone','みんな','エブリワン'],['someone','だれか','サムワン'],
+['birthday','たんじょうび','バースデイ'],['party','パーティー','パーティ'],['present','プレゼント','プレズント'],['letter','てがみ','レター'],
+['smile','えがお、ほほえむ','スマイル'],['love','あいする、だいすき','ラブ']]},
 {n:'がっこう・しごと',e:'🏫',w:[
-['school','がっこう'],['class','じゅぎょう、クラス'],['classroom','きょうしつ'],['homework','しゅくだい'],
-['test','テスト'],['pencil','えんぴつ'],['pen','ペン'],['eraser','けしゴム'],
-['notebook','ノート'],['paper','かみ(紙)'],['scissors','はさみ'],['glue','のり(接着)'],
-['ruler','じょうぎ'],['crayon','クレヨン'],['picture','え、しゃしん'],['music','おんがく'],
-['math','さんすう'],['English','えいご'],['Japanese','にほんご'],['science','りか、科学'],
-['sports','スポーツ'],['club','クラブ、部活'],['lunch','ひるごはん'],['break','きゅうけい'],
-['job','しごと'],['office','じむしょ、オフィス'],['meeting','かいぎ'],['idea','アイデア、思いつき'],
-['practice','れんしゅうする'],['win','かつ(勝つ)']]},
+['school','がっこう','スクール'],['class','じゅぎょう、クラス','クラス'],['classroom','きょうしつ','クラスルーム'],['homework','しゅくだい','ホームワーク'],
+['test','テスト','テスト'],['pencil','えんぴつ','ペンシル'],['pen','ペン','ペン'],['eraser','けしゴム','イレイサー'],
+['notebook','ノート','ノートブック'],['paper','かみ(紙)','ペーパー'],['scissors','はさみ','シザーズ'],['glue','のり(接着)','グルー'],
+['ruler','じょうぎ','ルーラー'],['crayon','クレヨン','クレヨン'],['picture','え、しゃしん','ピクチャー'],['music','おんがく','ミュージック'],
+['math','さんすう','マス'],['English','えいご','イングリッシュ'],['Japanese','にほんご','ジャパニーズ'],['science','りか、科学','サイエンス'],
+['sports','スポーツ','スポーツ'],['club','クラブ、部活','クラブ'],['lunch','ひるごはん','ランチ'],['break','きゅうけい','ブレイク'],
+['job','しごと','ジョブ'],['office','じむしょ、オフィス','オフィス'],['meeting','かいぎ','ミーティング'],['idea','アイデア、思いつき','アイディア'],
+['practice','れんしゅうする','プラクティス'],['win','かつ(勝つ)','ウィン']]},
 {n:'じかん',e:'🕐',w:[
-['time','じかん、とき'],['today','きょう'],['tomorrow','あした'],['yesterday','きのう'],
-['now','いま'],['morning','あさ'],['noon','ひる、正午'],['afternoon','ごご'],
-['evening','ゆうがた'],['night','よる'],['week','しゅう(週)'],['month','つき(月・1か月)'],
-['year','とし(年)'],['hour','1時間(60分)'],['minute','ふん(分)'],['date','ひづけ'],
-['calendar','カレンダー'],['Sunday','にちようび'],['Monday','げつようび'],['Tuesday','かようび'],
-['Wednesday','すいようび'],['Thursday','もくようび'],['Friday','きんようび'],['Saturday','どようび'],
-['summer','なつ'],['autumn','あき'],['winter','ふゆ'],['early','(時間が)はやい'],
-['late','(時間に)おそい、おくれた'],['weekend','しゅうまつ']]},
+['time','じかん、とき','タイム'],['today','きょう','トゥデイ'],['tomorrow','あした','トゥモロー'],['yesterday','きのう','イエスタデイ'],
+['now','いま','ナウ'],['morning','あさ','モーニング'],['noon','ひる、正午','ヌーン'],['afternoon','ごご','アフタヌーン'],
+['evening','ゆうがた','イブニング'],['night','よる','ナイト'],['week','しゅう(週)','ウィーク'],['month','つき(月・1か月)','マンス'],
+['year','とし(年)','イヤー'],['hour','1時間(60分)','アワー'],['minute','ふん(分)','ミニット'],['date','ひづけ','デイト'],
+['calendar','カレンダー','カレンダー'],['Sunday','にちようび','サンデイ'],['Monday','げつようび','マンデイ'],['Tuesday','かようび','チューズデイ'],
+['Wednesday','すいようび','ウェンズデイ'],['Thursday','もくようび','サーズデイ'],['Friday','きんようび','フライデイ'],['Saturday','どようび','サタデイ'],
+['summer','なつ','サマー'],['autumn','あき','オータム'],['winter','ふゆ','ウィンター'],['early','(時間が)はやい','アーリー'],
+['late','(時間に)おそい、おくれた','レイト'],['weekend','しゅうまつ','ウィークエンド']]},
 {n:'かいもの・かず',e:'🛒',w:[
-['money','おかね'],['shopping','かいもの'],['store','おみせ'],['price','ねだん'],
-['cheap','(ねだんが)やすい'],['expensive','(ねだんが)たかい'],['free','ただの、むりょうの'],['sale','セール、やすうり'],
-['coin','コイン、こうか'],['wallet','さいふ'],['customer','おきゃくさん'],['clerk','てんいん'],
-['one','1(いち)'],['two','2(に)'],['three','3(さん)'],['four','4(よん)'],
-['five','5(ご)'],['six','6(ろく)'],['seven','7(なな)'],['eight','8(はち)'],
-['nine','9(きゅう)'],['ten','10(じゅう)'],['hundred','100(ひゃく)'],['thousand','1000(せん)'],
-['first','1ばんめの'],['second','2ばんめの'],['half','はんぶん'],['all','ぜんぶ'],
-['many','たくさんの'],['few','すこしの']]}
+['money','おかね','マネー'],['shopping','かいもの','ショッピング'],['store','おみせ','ストア'],['price','ねだん','プライス'],
+['cheap','(ねだんが)やすい','チープ'],['expensive','(ねだんが)たかい','イクスペンシブ'],['free','ただの、むりょうの','フリー'],['sale','セール、やすうり','セイル'],
+['coin','コイン、こうか','コイン'],['wallet','さいふ','ウォレット'],['customer','おきゃくさん','カスタマー'],['clerk','てんいん','クラーク'],
+['one','1(いち)','ワン'],['two','2(に)','トゥー'],['three','3(さん)','スリー'],['four','4(よん)','フォー'],
+['five','5(ご)','ファイブ'],['six','6(ろく)','シックス'],['seven','7(なな)','セブン'],['eight','8(はち)','エイト'],
+['nine','9(きゅう)','ナイン'],['ten','10(じゅう)','テン'],['hundred','100(ひゃく)','ハンドレッド'],['thousand','1000(せん)','サウザンド'],
+['first','1ばんめの','ファースト'],['second','2ばんめの','セカンド'],['half','はんぶん','ハーフ'],['all','ぜんぶ','オール'],
+['many','たくさんの','メニー'],['few','すこしの','フュー']]}
 ];
 
 // 表示用英語(注釈カッコを除いたもの)と発音用
 const WORDS = [];
-CATS.forEach((c, ci) => c.w.forEach(([en, ja], wi) => {
+CATS.forEach((c, ci) => c.w.forEach(([en, ja, kana], wi) => {
   const disp = en.replace(/\(.*?\)/g, '').trim(); // "cold(病気)" → "cold"
-  WORDS.push({ id: ci + '_' + wi, en: disp, ja, ci });
+  WORDS.push({ id: ci + '_' + wi, en: disp, ja, kana, ci });
 }));
 const TOTAL = WORDS.length;
 
@@ -532,23 +534,28 @@ function nextQ(){
   document.getElementById('qMode').textContent = MODE_NAME[mode];
   const main = document.getElementById('qMain'), sub = document.getElementById('qSub');
   const ch = document.getElementById('choices'), sp = document.getElementById('spellWrap');
+  const kana = document.getElementById('qKana');
   ch.innerHTML = ''; ch.style.display = 'grid'; sp.style.display = 'none';
   document.getElementById('speakBtn').style.display = 'inline-block';
 
   if(mode === 'enja'){
-    main.textContent = w.en; sub.textContent = 'この単語のいみは?';
+    main.textContent = w.en; kana.textContent = '🗣️ ' + w.kana;
+    sub.textContent = 'この単語のいみは?(🔊で発音)';
     buildChoices(distractors(w,'ja'), 'ja');
     speak(w.en);
   } else if(mode === 'jaen'){
-    main.textContent = w.ja; sub.textContent = 'えいごで言うと?';
+    main.textContent = w.ja; kana.textContent = '';
+    sub.textContent = 'えいごで言うと?';
     document.getElementById('speakBtn').style.display = 'none';
     buildChoices(distractors(w,'en'), 'en');
   } else if(mode === 'listen'){
-    main.textContent = '🎧 ???'; sub.textContent = '音をきいて いみをえらぼう(🔊でもう一度)';
+    main.textContent = '🎧 ???'; kana.textContent = '';
+    sub.textContent = '音をきいて いみをえらぼう(🔊でもう一度)';
     buildChoices(distractors(w,'ja'), 'ja');
     setTimeout(() => speak(w.en), 300);
   } else { // spell
-    main.textContent = w.ja; sub.textContent = '文字をタップして えいごをつくろう';
+    main.textContent = w.ja; kana.textContent = '🗣️ ' + w.kana;
+    sub.textContent = '文字をタップして えいごをつくろう(🔊で発音)';
     ch.style.display = 'none'; sp.style.display = 'block';
     buildSpell(w);
     speak(w.en);
@@ -572,6 +579,9 @@ function answerChoice(btn, correct){
   if(answered) return; answered = true;
   const w = cur.w;
   if(cur.mode === 'listen') document.getElementById('qMain').textContent = w.en;
+  // 答え合わせと同時に読み方を表示&🔊を出す
+  document.getElementById('qKana').textContent = '🗣️ ' + w.kana;
+  document.getElementById('speakBtn').style.display = 'inline-block';
   document.querySelectorAll('.choice').forEach(b => {
     const isAns = b.textContent === (cur.mode === 'jaen' ? w.en : w.ja);
     if(isAns) b.classList.add('ok'); else if(b !== btn) b.classList.add('dim');
@@ -598,7 +608,7 @@ function onWrong(){
   ses.combo = 0; ses.wrong.push(w); S.todayN++;
   srsNg(w.id); save();
   sBuzz();
-  document.getElementById('fb').textContent = 'ざんねん… 「' + w.en + '」=「' + w.ja + '」';
+  document.getElementById('fb').textContent = 'ざんねん… ' + w.en + '(' + w.kana + ')=「' + w.ja + '」';
   speak(w.en);
   ses.i++; setTimeout(nextQ, 2000);
 }
@@ -696,7 +706,8 @@ function endSession(){
       const r = document.createElement('div'); r.className = 'wRow';
       const spk = document.createElement('button'); spk.className = 'miniSpk'; spk.textContent = '🔊';
       spk.onclick = () => speak(w.en);
-      const en = document.createElement('span'); en.className = 'en'; en.textContent = w.en;
+      const en = document.createElement('span'); en.className = 'en';
+      en.innerHTML = w.en + '<br><small style="color:#4a6cf7;font-size:11px;">' + w.kana + '</small>';
       const ja = document.createElement('span'); ja.className = 'ja'; ja.textContent = w.ja;
       r.append(spk, en, ja); wl.appendChild(r);
     });
@@ -739,7 +750,8 @@ function showBook(){
       const r = document.createElement('div'); r.className = 'bRow';
       const spk = document.createElement('button'); spk.className = 'miniSpk'; spk.textContent = '🔊';
       spk.onclick = () => speak(w.en);
-      const en = document.createElement('span'); en.className = 'en'; en.textContent = w.en;
+      const en = document.createElement('span'); en.className = 'en';
+      en.innerHTML = w.en + '<br><small style="color:#4a6cf7;font-size:11px;font-weight:normal;">' + w.kana + '</small>';
       const ja = document.createElement('span'); ja.className = 'ja'; ja.textContent = w.ja;
       const dots = document.createElement('span'); dots.className = 'dots';
       dots.textContent = '●'.repeat(lv) + '○'.repeat(4 - lv);
