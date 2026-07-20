@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>めんそーれ!おきなわアイランド</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Hiragino Maru Gothic ProN", "BIZ UDGothic", "Yu Gothic", sans-serif;
+    background: linear-gradient(180deg, #7ec8f7 0%, #aee6ff 35%, #55c1e8 55%, #2b9fd8 75%, #f7e3b0 92%, #f0d089 100%);
+    user-select: none; -webkit-user-select: none;
+    touch-action: manipulation;
+    position: relative;
+  }
+  #app { height: 100%; display: flex; flex-direction: column; position: relative; z-index: 2; }
+
+  /* ===== ゆらゆら背景 ===== */
+  .bg-deco { position: fixed; z-index: 1; pointer-events: none; font-size: 40px; opacity: .8;
+    animation: floaty 6s ease-in-out infinite; }
+  @keyframes floaty { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-14px) } }
+
+  /* ===== 共通パーツ ===== */
+  .screen { flex: 1; display: none; flex-direction: column; align-items: center;
+    padding: 12px; overflow-y: auto; }
+  .screen.active { display: flex; }
+
+  .top-bar { width: 100%; max-width: 560px; display: flex; align-items: center;
+    justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .btn-back {
+    background: #fff; border: 3px solid #ff8a5c; border-radius: 999px;
+    font-size: 20px; font-weight: bold; color: #e05a2b; padding: 8px 18px;
+    cursor: pointer; box-shadow: 0 4px 0 #e0764c;
+  }
+  .btn-back:active { transform: translateY(3px); box-shadow: 0 1px 0 #e0764c; }
+  .star-count {
+    background: #fff8dc; border: 3px solid #ffc93c; border-radius: 999px;
+    font-size: 20px; font-weight: bold; color: #b8860b; padding: 8px 16px;
+    box-shadow: 0 3px 0 #e6b422;
+  }
+
+  .title-big {
+    font-size: clamp(26px, 7vw, 44px); font-weight: 900; color: #fff;
+    text-shadow: 0 3px 0 #1a7fb5, 0 6px 12px rgba(0,0,0,.25);
+    text-align: center; line-height: 1.3; margin: 10px 0 4px;
+  }
+  .subtitle { font-size: clamp(14px, 4vw, 20px); color: #075a86; font-weight: bold;
+    background: rgba(255,255,255,.75); padding: 6px 16px; border-radius: 999px; margin-bottom: 14px; }
+
+  .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    width: 100%; max-width: 560px; padding-bottom: 20px; }
+  .menu-card {
+    background: #fff; border-radius: 24px; border: none; cursor: pointer;
+    padding: 18px 8px 14px; text-align: center;
+    box-shadow: 0 6px 0 rgba(0,0,0,.12);
+    transition: transform .1s;
+  }
+  .menu-card:active { transform: scale(.95) translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,.12); }
+  .menu-card .emoji { font-size: clamp(44px, 12vw, 64px); display: block; margin-bottom: 6px; }
+  .menu-card .name { font-size: clamp(15px, 4.2vw, 20px); font-weight: 900; color: #333; line-height: 1.3; }
+  .menu-card.c1 { background: linear-gradient(160deg, #fff, #d9f4ff); }
+  .menu-card.c2 { background: linear-gradient(160deg, #fff, #ffe9d9); }
+  .menu-card.c3 { background: linear-gradient(160deg, #fff, #ffe0ec); }
+  .menu-card.c4 { background: linear-gradient(160deg, #fff, #e4ffd9); }
+  .menu-card.c5 { background: linear-gradient(160deg, #fff, #fff3c4); grid-column: 1 / -1; }
+
+  /* ===== 問題エリア ===== */
+  .question-box {
+    width: 100%; max-width: 560px; background: rgba(255,255,255,.95);
+    border-radius: 22px; padding: 14px 16px; text-align: center;
+    font-size: clamp(19px, 5.2vw, 27px); font-weight: 900; color: #06527a;
+    box-shadow: 0 4px 12px rgba(0,0,0,.15); cursor: pointer; margin-bottom: 12px;
+    line-height: 1.4;
+  }
+  .question-box .hint { display: block; font-size: 13px; color: #999; font-weight: normal; margin-top: 4px; }
+
+  .stage {
+    width: 100%; max-width: 560px; background: rgba(230,247,255,.96);
+    border-radius: 22px; min-height: 150px; display: flex; flex-wrap: wrap;
+    align-items: center; justify-content: center; gap: 4px; padding: 14px;
+    margin-bottom: 14px; font-size: clamp(34px, 9vw, 52px);
+  }
+  .stage .item { animation: pop-in .4s backwards; }
+  @keyframes pop-in { from { transform: scale(0) rotate(-20deg); } to { transform: scale(1) rotate(0); } }
+
+  .choices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+    width: 100%; max-width: 560px; padding-bottom: 16px; }
+  .choices.three { grid-template-columns: repeat(3, 1fr); }
+  .choice-btn {
+    background: #fff; border: 4px solid #4db8e8; border-radius: 20px;
+    font-size: clamp(30px, 9vw, 48px); font-weight: 900; color: #06527a;
+    padding: 16px 6px; cursor: pointer; box-shadow: 0 5px 0 #2f96c4;
+    transition: transform .1s; font-family: inherit; line-height: 1.2;
+  }
+  .choice-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #2f96c4; }
+  .choice-btn.correct { background: #d3f9d8; border-color: #37b24d; box-shadow: 0 5px 0 #2b8a3e; animation: bounce .5s; }
+  .choice-btn.wrong { background: #ffe3e3; border-color: #adb5bd; box-shadow: 0 5px 0 #868e96; opacity: .55; }
+  @keyframes bounce { 0%,100%{transform:scale(1)} 40%{transform:scale(1.15)} 70%{transform:scale(.95)} }
+
+  .silhouette { filter: brightness(0) opacity(.75); }
+
+  /* ===== たいこ ===== */
+  .taiko-area { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; max-width: 560px; }
+  .taiko {
+    font-size: clamp(110px, 34vw, 190px); cursor: pointer; line-height: 1;
+    transition: transform .08s; filter: drop-shadow(0 8px 10px rgba(0,0,0,.25));
+  }
+  .taiko:active, .taiko.hit { transform: scale(.88); }
+  .taiko-count {
+    font-size: clamp(50px, 15vw, 84px); font-weight: 900; color: #fff;
+    text-shadow: 0 3px 0 #c9452a, 0 6px 10px rgba(0,0,0,.3); min-height: 1.2em;
+  }
+  .taiko-dots { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; font-size: 26px; min-height: 34px; }
+
+  /* ===== スタンプちょう ===== */
+  .stamp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    width: 100%; max-width: 560px; padding-bottom: 20px; }
+  .stamp-cell {
+    background: #fff; border-radius: 20px; padding: 14px 6px; text-align: center;
+    box-shadow: 0 4px 0 rgba(0,0,0,.1);
+  }
+  .stamp-cell .emoji { font-size: clamp(38px, 11vw, 56px); display: block; }
+  .stamp-cell .name { font-size: clamp(11px, 3.2vw, 14px); font-weight: bold; color: #555; margin-top: 4px; display: block; }
+  .stamp-cell.locked { opacity: .95; }
+  .stamp-cell.locked .emoji { filter: grayscale(1) brightness(0) opacity(.15); }
+  .stamp-cell.locked .name { color: #bbb; }
+  .stamp-cell.new { animation: bounce .6s; background: #fff8dc; }
+  .stamp-progress { font-size: 16px; font-weight: bold; color: #06527a;
+    background: rgba(255,255,255,.8); border-radius: 999px; padding: 6px 18px; margin-bottom: 12px; }
+
+  /* ===== ほめほめオーバーレイ ===== */
+  #praise {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    flex-direction: column; z-index: 50; pointer-events: none;
+  }
+  #praise.show { display: flex; }
+  #praise .word {
+    font-size: clamp(44px, 13vw, 80px); font-weight: 900; color: #ff6b35;
+    text-shadow: 0 4px 0 #fff, 0 8px 16px rgba(0,0,0,.2);
+    animation: praise-pop .6s;
+  }
+  #praise .chara { font-size: clamp(60px, 18vw, 110px); animation: praise-pop .6s .1s backwards; }
+  @keyframes praise-pop { 0% { transform: scale(0) rotate(-10deg); } 60% { transform: scale(1.2); } 100% { transform: scale(1); } }
+
+  #confetti-canvas { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+
+  .big-start-btn {
+    background: linear-gradient(180deg, #ffd93c, #ffb800); border: none; border-radius: 999px;
+    font-size: clamp(22px, 6vw, 30px); font-weight: 900; color: #7a4a00;
+    padding: 16px 42px; cursor: pointer; box-shadow: 0 6px 0 #d49600; margin-top: 8px;
+    font-family: inherit;
+  }
+  .big-start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #d49600; }
+</style>
+</head>
+<body>
+<canvas id="confetti-canvas"></canvas>
+<div id="praise"><div class="chara"></div><div class="word"></div></div>
+
+<div id="app">
+
+  <!-- ========== メニュー ========== -->
+  <div class="screen active" id="scr-menu">
+    <div class="title-big">🌺 めんそーれ!<br>おきなわアイランド 🏝️</div>
+    <div class="subtitle">あそんで おきなわ はかせに なろう!</div>
+    <div class="menu-grid">
+      <button class="menu-card c1" data-game="count">
+        <span class="emoji">🐠🔢</span>
+        <span class="name">うみで<br>かぞえよう</span>
+      </button>
+      <button class="menu-card c2" data-game="shadow">
+        <span class="emoji">🦁❓</span>
+        <span class="name">かげは<br>だれかな</span>
+      </button>
+      <button class="menu-card c3" data-game="quiz">
+        <span class="emoji">🍍🌺</span>
+        <span class="name">おきなわ<br>クイズ</span>
+      </button>
+      <button class="menu-card c4" data-game="taiko">
+        <span class="emoji">🥁✨</span>
+        <span class="name">エイサー<br>たいこ</span>
+      </button>
+      <button class="menu-card c5" data-game="stamps">
+        <span class="emoji">📖⭐</span>
+        <span class="name">スタンプちょう</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== ゲーム共通画面 ========== -->
+  <div class="screen" id="scr-game">
+    <div class="top-bar">
+      <button class="btn-back" id="btn-back">← もどる</button>
+      <div class="star-count">⭐ <span id="star-num">0</span></div>
+    </div>
+    <div class="question-box" id="q-box">
+      <span id="q-text"></span>
+      <span class="hint">🔊 タップすると もういちど きけるよ</span>
+    </div>
+    <div class="stage" id="stage"></div>
+    <div class="choices" id="choices"></div>
+    <div class="taiko-area" id="taiko-area" style="display:none">
+      <div class="taiko-dots" id="taiko-dots"></div>
+      <div class="taiko" id="taiko">🥁</div>
+      <div class="taiko-count" id="taiko-count"></div>
+    </div>
+  </div>
+
+  <!-- ========== スタンプちょう ========== -->
+  <div class="screen" id="scr-stamps">
+    <div class="top-bar">
+      <button class="btn-back" id="btn-back2">← もどる</button>
+      <div class="star-count">⭐ <span id="star-num2">0</span></div>
+    </div>
+    <div class="title-big" style="font-size:clamp(22px,6vw,32px)">📖 おきなわ スタンプちょう</div>
+    <div class="stamp-progress" id="stamp-progress"></div>
+    <div class="stamp-grid" id="stamp-grid"></div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+/* ================= 音声よみあげ ================= */
+let jaVoice = null;
+function pickVoice() {
+  const vs = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ja'));
+  jaVoice = vs.find(v => /Kyoko|O-?ren|Google/.test(v.name)) || vs[0] || null;
+}
+if ('speechSynthesis' in window) {
+  pickVoice();
+  speechSynthesis.onvoiceschanged = pickVoice;
+}
+function speak(text, rate = 0.95) {
+  if (!('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ja-JP';
+  if (jaVoice) u.voice = jaVoice;
+  u.rate = rate;
+  u.pitch = 1.15;
+  speechSynthesis.speak(u);
+}
+
+/* ================= こうかおん ================= */
+let audioCtx = null;
+function ac() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function tone(freq, dur, type, vol, when = 0) {
+  const ctx = ac();
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, ctx.currentTime + when);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + when + dur);
+  o.connect(g).connect(ctx.destination);
+  o.start(ctx.currentTime + when); o.stop(ctx.currentTime + when + dur);
+}
+const sfx = {
+  correct() { [523, 659, 784, 1047].forEach((f, i) => tone(f, .35, 'triangle', .25, i * .09)); },
+  wrong()   { tone(220, .3, 'sawtooth', .12); },
+  tap()     { tone(880, .08, 'triangle', .2); },
+  drum()    { tone(140, .18, 'sine', .5); tone(90, .25, 'sine', .4); },
+  stamp()   { [660, 880, 990, 1320, 1760].forEach((f, i) => tone(f, .4, 'triangle', .22, i * .11)); },
+};
+
+/* ================= かみふぶき ================= */
+const cv = document.getElementById('confetti-canvas');
+const cx = cv.getContext('2d');
+let parts = [];
+function resizeCv() { cv.width = innerWidth; cv.height = innerHeight; }
+addEventListener('resize', resizeCv); resizeCv();
+function confetti(n = 60) {
+  const colors = ['#ff6b6b', '#ffd93c', '#4dd68a', '#4db8e8', '#c77dff', '#ff9f43'];
+  for (let i = 0; i < n; i++) {
+    parts.push({
+      x: Math.random() * cv.width, y: -20 - Math.random() * 120,
+      vx: (Math.random() - .5) * 3, vy: 2 + Math.random() * 3.5,
+      s: 6 + Math.random() * 8, r: Math.random() * Math.PI,
+      vr: (Math.random() - .5) * .3, c: colors[i % colors.length],
+    });
+  }
+}
+(function loop() {
+  cx.clearRect(0, 0, cv.width, cv.height);
+  parts = parts.filter(p => p.y < cv.height + 30);
+  for (const p of parts) {
+    p.x += p.vx; p.y += p.vy; p.r += p.vr;
+    cx.save(); cx.translate(p.x, p.y); cx.rotate(p.r);
+    cx.fillStyle = p.c; cx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * .6);
+    cx.restore();
+  }
+  requestAnimationFrame(loop);
+})();
+
+/* ================= ほめほめ ================= */
+const PRAISES = [
+  ['すごーい!', '🦁'], ['やったね!', '🐢'], ['せいかい!', '🐠'],
+  ['てんさい!', '🌺'], ['めんそーれ!', '🏝️'], ['かんぺき!', '🍍'],
+];
+function showPraise() {
+  const [w, c] = PRAISES[Math.floor(Math.random() * PRAISES.length)];
+  const el = document.getElementById('praise');
+  el.querySelector('.word').textContent = w;
+  el.querySelector('.chara').textContent = c;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1300);
+  return w;
+}
+
+/* ================= セーブデータ ================= */
+const SAVE_KEY = 'okinawa-island-save-v1';
+let save = { stars: 0, levels: {} };
+try { save = Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
+function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+function updateStarUI() {
+  document.getElementById('star-num').textContent = save.stars;
+  document.getElementById('star-num2').textContent = save.stars;
+}
+
+/* ================= スタンプ ================= */
+const STAMPS = [
+  ['🦁', 'シーサー'], ['🌺', 'ハイビスカス'], ['🐢', 'ウミガメ'],
+  ['🍍', 'パイナップル'], ['🥁', 'エイサー'], ['🐠', 'ねったいぎょ'],
+  ['🥒', 'ゴーヤ'], ['🦈', 'ジンベエザメ'], ['🍩', 'サーターアンダギー'],
+  ['🐷', 'あぐーぶた'], ['🏰', 'しゅりじょう'], ['🌊', 'きれいな うみ'],
+  ['🍊', 'シークヮーサー'], ['🐍', 'ハブ'], ['👘', 'りゅうそう'],
+];
+const STAR_PER_STAMP = 5;
+function stampCount() { return Math.min(STAMPS.length, Math.floor(save.stars / STAR_PER_STAMP)); }
+
+function renderStamps(newIdx = -1) {
+  const grid = document.getElementById('stamp-grid');
+  grid.innerHTML = '';
+  const owned = stampCount();
+  STAMPS.forEach(([emoji, name], i) => {
+    const cell = document.createElement('div');
+    cell.className = 'stamp-cell' + (i < owned ? '' : ' locked') + (i === newIdx ? ' new' : '');
+    cell.innerHTML = `<span class="emoji">${emoji}</span><span class="name">${i < owned ? name : '???'}</span>`;
+    grid.appendChild(cell);
+  });
+  const need = owned >= STAMPS.length ? 0 : STAR_PER_STAMP - (save.stars % STAR_PER_STAMP);
+  document.getElementById('stamp-progress').textContent =
+    owned >= STAMPS.length ? '🎉 ぜんぶ あつめたよ! おきなわ はかせ!' :
+    `あと ⭐${need}こで つぎの スタンプ!(${owned} / ${STAMPS.length})`;
+}
+
+function addStar() {
+  const before = stampCount();
+  save.stars++;
+  persist(); updateStarUI();
+  if (stampCount() > before) {
+    // 新スタンプ獲得!
+    setTimeout(() => {
+      sfx.stamp(); confetti(120);
+      const [emoji, name] = STAMPS[before];
+      speak(`やったー! ${name} の スタンプを もらったよ!`);
+      showScreen('scr-stamps');
+      renderStamps(before);
+    }, 1400);
+    return true;
+  }
+  return false;
+}
+
+/* ================= 画面切りかえ ================= */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+}
+
+/* ================= ゲームエンジン共通 ================= */
+let currentGame = null;
+let locked = false; // 連打よけ
+
+const qText = document.getElementById('q-text');
+const stage = document.getElementById('stage');
+const choicesEl = document.getElementById('choices');
+const taikoArea = document.getElementById('taiko-area');
+
+function setQuestion(display, spoken) {
+  qText.textContent = display;
+  qText.dataset.spoken = spoken || display;
+  speak(qText.dataset.spoken);
+}
+document.getElementById('q-box').addEventListener('click', () => {
+  if (qText.dataset.spoken) speak(qText.dataset.spoken);
+});
+
+function level(game) { return save.levels[game] || 0; }
+function levelUp(game, max) {
+  save.levels[game] = Math.min(max, level(game) + 1);
+  persist();
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+
+function makeChoices(list, correct, onCorrect, cls) {
+  choicesEl.innerHTML = '';
+  choicesEl.className = 'choices' + (list.length === 3 ? ' three' : '');
+  list.forEach(v => {
+    const b = document.createElement('button');
+    b.className = 'choice-btn' + (cls ? ' ' + cls : '');
+    b.textContent = v;
+    b.addEventListener('click', () => {
+      if (locked) return;
+      if (String(v) === String(correct)) {
+        locked = true;
+        b.classList.add('correct');
+        sfx.correct(); confetti(50);
+        const w = showPraise();
+        speak(w);
+        const gotStamp = addStar();
+        setTimeout(() => { locked = false; if (!gotStamp) onCorrect(); }, 1500);
+      } else {
+        b.classList.add('wrong');
+        sfx.wrong();
+        speak('おしい! もういっかい!');
+      }
+    });
+    choicesEl.appendChild(b);
+  });
+}
+
+/* ================= ゲーム1: うみで かぞえよう ================= */
+const SEA = [
+  ['🐢', 'ウミガメ', 'ひき'], ['🐠', 'おさかな', 'ひき'], ['🐡', 'ふぐ', 'ひき'],
+  ['🦀', 'カニ', 'ひき'], ['🐙', 'タコ', 'ひき'], ['🐬', 'イルカ', 'とう'],
+  ['🦈', 'ジンベエザメ', 'とう'], ['⭐', 'ヒトデ', 'こ'], ['🐚', 'かいがら', 'こ'],
+];
+function gameCount() {
+  stage.style.display = 'flex';
+  taikoArea.style.display = 'none';
+  const lv = level('count'); // 0..4
+  const maxN = [3, 5, 7, 9, 10][lv];
+  const n = 1 + Math.floor(Math.random() * maxN);
+  const [emoji, name, unit] = pick(SEA);
+
+  stage.innerHTML = '';
+  const hasDecoy = lv >= 2;
+  const items = Array(n).fill(emoji);
+  if (hasDecoy) {
+    let decoy = pick(SEA)[0];
+    while (decoy === emoji) decoy = pick(SEA)[0];
+    const dN = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < dN; i++) items.push(decoy);
+  }
+  shuffle(items).forEach((e, i) => {
+    const s = document.createElement('span');
+    s.className = 'item'; s.textContent = e;
+    s.style.animationDelay = (i * .07) + 's';
+    s.style.transform = `rotate(${(Math.random() - .5) * 24}deg)`;
+    stage.appendChild(s);
+  });
+
+  setQuestion(`${emoji} ${name}は なん${unit} いるかな?`, `${name}は、なん${unit} いるかな?`);
+
+  const opts = new Set([n]);
+  while (opts.size < 3) {
+    const d = Math.max(1, Math.min(maxN + (hasDecoy ? 2 : 0), n + (Math.floor(Math.random() * 5) - 2)));
+    opts.add(d);
+  }
+  makeChoices(shuffle([...opts]), n, () => { maybeLevelUp('count', 4); gameCount(); });
+}
+
+/* ================= ゲーム2: かげは だれかな ================= */
+const SHADOW_ITEMS = [
+  ['🦁', 'シーサー'], ['🐢', 'ウミガメ'], ['🐠', 'ねったいぎょ'], ['🦈', 'ジンベエザメ'],
+  ['🐙', 'タコ'], ['🦀', 'カニ'], ['🐬', 'イルカ'], ['🍍', 'パイナップル'],
+  ['🌺', 'ハイビスカス'], ['🐷', 'ぶたさん'], ['🥁', 'たいこ'], ['🦋', 'ちょうちょ'],
+  ['🐍', 'ハブ'], ['🦅', 'とり'], ['🌴', 'ヤシのき'], ['⛵', 'ふね'],
+];
+function gameShadow() {
+  stage.style.display = 'flex';
+  taikoArea.style.display = 'none';
+  const lv = level('shadow');
+  const nChoice = [2, 3, 4, 4, 4][lv];
+
+  const pool = shuffle([...SHADOW_ITEMS]).slice(0, nChoice);
+  const answer = pool[0];
+
+  stage.innerHTML = `<span class="item silhouette" style="font-size:clamp(70px,22vw,120px)">${answer[0]}</span>`;
+  setQuestion('この かげは だれかな?', 'この かげは、だれかな?');
+
+  makeChoices(shuffle(pool.map(p => p[0])), answer[0], () => { maybeLevelUp('shadow', 4); gameShadow(); });
+}
+
+/* ================= ゲーム3: おきなわクイズ ================= */
+const QUIZ = [
+  // [正解emoji, 正解のなまえ, 問題文, デコイemoji群]
+  ['🌺', 'ハイビスカス', 'おきなわに さく あかい おはなは どれ?', ['🍍', '🐢', '🥒']],
+  ['🥒', 'ゴーヤ', 'にがーい みどりの やさい ゴーヤは どれ?', ['🍍', '🍊', '🌺']],
+  ['🍍', 'パイナップル', 'とげとげ あまい きいろの くだものは どれ?', ['🥒', '🍆', '🐠']],
+  ['🦁', 'シーサー', 'おうちを まもってくれる シーサーは どれ?', ['🐷', '🐕', '🐈']],
+  ['🐢', 'ウミガメ', 'うみを ゆっくり およぐ かめさんは どれ?', ['🐙', '🦀', '🐡']],
+  ['🦈', 'ジンベエザメ', 'うみで いちばん おおきな おさかなは どれ?', ['🐠', '🐡', '🦐']],
+  ['🥁', 'たいこ', 'エイサーで たたく たいこは どれ?', ['🎸', '🎺', '🎹']],
+  ['🌊', 'うみ', 'おきなわの きれいな あおい うみは どれ?', ['🗻', '🌋', '🏜️']],
+  ['🍊', 'シークヮーサー', 'すっぱーい ちいさな みかん シークヮーサーは どれ?', ['🍎', '🍇', '🍌']],
+  ['🐍', 'ハブ', 'おきなわの にょろにょろ ヘビ ハブは どれ?', ['🐛', '🦎', '🐸']],
+  ['🐷', 'あぐーぶた', 'おきなわの おいしい ぶたさんは どれ?', ['🐮', '🐔', '🐑']],
+  ['🌴', 'ヤシのき', 'うみべに はえてる のっぽの きは どれ?', ['🌲', '🌵', '🍄']],
+  ['🍩', 'サーターアンダギー', 'まるくて あまーい おきなわの ドーナツは どれ?', ['🍙', '🍕', '🍜']],
+  ['👘', 'りゅうそう', 'おきなわの きれいな おようふくは どれ?', ['👕', '🧥', '👗']],
+  ['🏰', 'しゅりじょう', 'おきなわの あかい おしろ しゅりじょうは どれ?', ['🏠', '🏥', '🏫']],
+];
+let quizQueue = [];
+function gameQuiz() {
+  stage.style.display = 'none';
+  taikoArea.style.display = 'none';
+  if (quizQueue.length === 0) quizQueue = shuffle([...QUIZ]);
+  const [emoji, name, q, decoys] = quizQueue.pop();
+  setQuestion(q);
+  const opts = shuffle([emoji, ...decoys]);
+  makeChoices(opts, emoji, () => {
+    speak(`そう! ${name} だね!`);
+    setTimeout(gameQuiz, 900);
+  });
+}
+
+/* ================= ゲーム4: エイサーたいこ ================= */
+const COUNT_WORDS = ['いち', 'に', 'さん', 'よん', 'ご', 'ろく', 'なな', 'はち', 'きゅう', 'じゅう'];
+let taikoTarget = 0, taikoHits = 0, taikoDone = false;
+function gameTaiko() {
+  stage.style.display = 'none';
+  choicesEl.innerHTML = '';
+  taikoArea.style.display = 'flex';
+  const lv = level('taiko');
+  const maxN = [3, 5, 7, 9, 10][lv];
+  taikoTarget = 2 + Math.floor(Math.random() * (maxN - 1));
+  taikoHits = 0; taikoDone = false;
+  document.getElementById('taiko-count').textContent = '';
+  document.getElementById('taiko-dots').textContent = '⚪'.repeat(taikoTarget);
+  setQuestion(`たいこを ${taikoTarget}かい たたこう!`, `エイサー エイサー! たいこを ${taikoTarget}かい たたいてね!`);
+}
+document.getElementById('taiko').addEventListener('click', () => {
+  if (currentGame !== 'taiko' || taikoDone) return;
+  taikoHits++;
+  sfx.drum();
+  const t = document.getElementById('taiko');
+  t.classList.add('hit');
+  setTimeout(() => t.classList.remove('hit'), 90);
+  document.getElementById('taiko-count').textContent = taikoHits;
+  document.getElementById('taiko-dots').textContent =
+    '🔴'.repeat(Math.min(taikoHits, taikoTarget)) + '⚪'.repeat(Math.max(0, taikoTarget - taikoHits));
+  speak(COUNT_WORDS[Math.min(taikoHits, 10) - 1], 1.25);
+  if (taikoHits >= taikoTarget) {
+    taikoDone = true;
+    setTimeout(() => {
+      sfx.correct(); confetti(60);
+      const w = showPraise();
+      speak(`${taikoTarget}かい たたけたね! ${w}`);
+      const gotStamp = addStar();
+      maybeLevelUp('taiko', 4);
+      if (!gotStamp) setTimeout(gameTaiko, 2000);
+    }, 600);
+  }
+});
+
+/* ================= レベルアップ管理 ================= */
+const streaks = {};
+function maybeLevelUp(game, max) {
+  streaks[game] = (streaks[game] || 0) + 1;
+  if (streaks[game] >= 3) { streaks[game] = 0; levelUp(game, max); }
+}
+
+/* ================= 起動・遷移 ================= */
+const GAMES = { count: gameCount, shadow: gameShadow, quiz: gameQuiz, taiko: gameTaiko };
+
+document.querySelectorAll('.menu-card').forEach(card => {
+  card.addEventListener('click', () => {
+    ac(); // ユーザー操作で音声解禁
+    const g = card.dataset.game;
+    if (g === 'stamps') {
+      updateStarUI(); renderStamps();
+      showScreen('scr-stamps');
+      speak('おきなわ スタンプちょう だよ');
+      return;
+    }
+    currentGame = g;
+    updateStarUI();
+    showScreen('scr-game');
+    GAMES[g]();
+  });
+});
+document.getElementById('btn-back').addEventListener('click', () => {
+  speechSynthesis.cancel();
+  currentGame = null;
+  showScreen('scr-menu');
+});
+document.getElementById('btn-back2').addEventListener('click', () => {
+  speechSynthesis.cancel();
+  if (currentGame) { showScreen('scr-game'); GAMES[currentGame](); }
+  else showScreen('scr-menu');
+});
+
+/* ===== 背景かざり ===== */
+(function decorate() {
+  const decos = ['🌴', '☀️', '⛅', '🌺', '🐚', '⛵', '🐬'];
+  decos.forEach((d, i) => {
+    const el = document.createElement('div');
+    el.className = 'bg-deco';
+    el.textContent = d;
+    el.style.left = (5 + (i * 13.5) % 90) + '%';
+    el.style.top = (4 + (i * 17) % 30) + '%';
+    el.style.animationDelay = (i * .8) + 's';
+    el.style.fontSize = (28 + (i % 3) * 12) + 'px';
+    document.body.appendChild(el);
+  });
+})();
+
+updateStarUI();
+</script>
+</body>
+</html>
