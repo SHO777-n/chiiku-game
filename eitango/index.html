@@ -70,11 +70,28 @@
   .menuCard .em { font-size:clamp(30px,9vw,42px); line-height:1.1; filter:drop-shadow(0 2px 2px rgba(0,0,0,.25)); }
   .menuCard .nm { font-size:clamp(14px,4vw,17px); font-weight:bold; text-shadow:1px 1px 0 rgba(0,0,0,.25); }
   .menuCard .ds { font-size:11px; opacity:.92; }
-  #bookBtn {
+  #bookBtn, #transBtn {
     border:none; border-radius:18px; padding:12px; cursor:pointer; font-family:inherit; margin-bottom:8px;
-    background:#fff; color:#4a6cf7; font-size:17px; font-weight:bold; box-shadow:0 4px 0 rgba(0,0,0,.2);
+    background:#fff; color:#4a6cf7; font-size:17px; font-weight:bold; box-shadow:0 4px 0 rgba(0,0,0,.2); width:100%;
   }
-  #bookBtn:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.2); }
+  #bookBtn:active, #transBtn:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.2); }
+  #transBtn { color:#7b1fa2; }
+
+  /* ===== transfer ===== */
+  .tCard { background:#fff; border-radius:18px; padding:14px; margin-bottom:12px; box-shadow:0 4px 0 rgba(0,0,0,.15); }
+  .tCard h3 { font-size:16px; color:#333; margin-bottom:6px; }
+  .tCard p { font-size:13px; color:#666; line-height:1.5; margin-bottom:8px; }
+  .tCard textarea {
+    width:100%; height:88px; border:2px solid #b9c2e0; border-radius:10px; padding:8px;
+    font-size:12px; font-family:monospace; resize:none; -webkit-user-select:text; user-select:text;
+  }
+  .tBtn {
+    border:none; border-radius:12px; padding:10px 16px; margin-top:8px; cursor:pointer; font-family:inherit;
+    font-size:15px; font-weight:bold; color:#fff; background:#4a6cf7; box-shadow:0 3px 0 #2f4dd0;
+  }
+  .tBtn:active { transform:translateY(2px); box-shadow:0 1px 0 #2f4dd0; }
+  .tBtn.green { background:#00a152; box-shadow:0 3px 0 #007038; }
+  #tMsg { text-align:center; font-weight:bold; color:#fff; text-shadow:1px 1px 0 rgba(0,0,0,.3); min-height:24px; font-size:15px; }
 
   /* ===== quiz ===== */
   #qHead { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
@@ -204,6 +221,7 @@
       <div style="text-align:center;color:#fff;font-weight:bold;font-size:13px;text-shadow:1px 1px 0 #2f4dd0;margin:2px 0 4px;">▼ 出題ジャンル</div>
       <div id="catRow"></div>
       <button id="bookBtn" onclick="showBook()">📖 たんご図鑑(おぼえた単語をチェック)</button>
+      <button id="transBtn" onclick="showTransfer()">💾 きろくのひきつぎ(別の端末・アプリへ)</button>
       <div style="text-align:center;color:rgba(255,255,255,.85);font-size:11px;padding-bottom:8px;">全2000語収録・まちがえた単語ほど くり返し出てくるよ(スペースドリピティション)</div>
     </div>
   </div>
@@ -257,6 +275,27 @@
   <div class="screen" id="scrBook">
     <div id="bookHead"></div>
     <div class="scroll" id="bookList" style="flex:1;"></div>
+  </div>
+
+  <!-- ===== TRANSFER ===== -->
+  <div class="screen" id="scrTrans">
+    <div class="scroll" style="flex:1;">
+      <div class="tCard">
+        <h3>📤 この端末の記録をコードにする</h3>
+        <p>下のコードを全部コピーして、もう一方の端末・アプリの「読み込む」に貼り付けてね。<br>
+        ※ ホーム画面に追加したアプリとブラウザは記録が別々に保存されるので、このコードで引っ越しできるよ。</p>
+        <textarea id="tOut" readonly onclick="this.select()"></textarea>
+        <button class="tBtn" onclick="copyCode()">📋 コードをコピー</button>
+      </div>
+      <div class="tCard">
+        <h3>📥 コードを読み込む</h3>
+        <p>もう一方の端末で出したコードをここに貼り付けて「読み込む」を押してね。<br>
+        ⚠️ いまのこの端末の記録は、コードの内容で<b>上書き</b>されるよ。</p>
+        <textarea id="tIn" placeholder="ここにコードを貼り付け"></textarea>
+        <button class="tBtn green" onclick="importCode()">✅ 読み込む</button>
+      </div>
+      <div id="tMsg"></div>
+    </div>
   </div>
 </div>
 
@@ -1280,6 +1319,50 @@ function showBook(){
     cat.append(head, box); list.appendChild(cat);
   });
   show('scrBook');
+}
+
+// ---------- きろくのひきつぎ ----------
+const CODE_PREFIX = 'ETQ1.';
+function exportCode(){
+  return CODE_PREFIX + btoa(unescape(encodeURIComponent(JSON.stringify(S))));
+}
+function decodeCode(str){
+  str = (str || '').trim();
+  if(!str.startsWith(CODE_PREFIX)) return null;
+  try{
+    const d = JSON.parse(decodeURIComponent(escape(atob(str.slice(CODE_PREFIX.length)))));
+    if(!d || typeof d !== 'object' || typeof d.words !== 'object') return null;
+    return Object.assign(defState(), d);
+  }catch(e){ return null; }
+}
+function showTransfer(){
+  ac();
+  document.getElementById('tOut').value = exportCode();
+  document.getElementById('tIn').value = '';
+  document.getElementById('tMsg').textContent = '';
+  show('scrTrans');
+}
+function copyCode(){
+  const ta = document.getElementById('tOut');
+  ta.select(); ta.setSelectionRange(0, 999999);
+  const done = () => { sDing(); document.getElementById('tMsg').textContent = '📋 コピーしたよ!もう一方の端末で貼り付けてね'; };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(ta.value).then(done, () => { document.execCommand('copy'); done(); });
+  } else { document.execCommand('copy'); done(); }
+}
+function importCode(){
+  const d = decodeCode(document.getElementById('tIn').value);
+  const msg = document.getElementById('tMsg');
+  if(!d){ sBuzz(); msg.textContent = '❌ コードが読み取れないよ。全部コピーできているか確認してね'; return; }
+  const inN = Object.keys(d.words).filter(id => d.words[id].lv >= MASTER_LV).length;
+  const curN = masteredCount();
+  if(!confirm('コードの記録: おぼえた' + inN + '語・⭐' + d.stars +
+      '\nこの端末の記録: おぼえた' + curN + '語・⭐' + S.stars +
+      '\n\nこの端末の記録をコードの内容で上書きする?')) return;
+  S = d; save();
+  sFanfare(); confetti();
+  msg.textContent = '✅ 引き継ぎ完了!(おぼえた' + inN + '語・⭐' + d.stars + ')';
+  updateHome();
 }
 
 // ---------- 初期化 ----------
