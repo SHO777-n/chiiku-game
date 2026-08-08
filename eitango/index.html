@@ -60,7 +60,23 @@
   }
   #dailyBtn small { display:block; font-size:13px; font-weight:normal; margin-top:3px; }
   #dailyBtn:active { transform:translateY(4px); box-shadow:0 2px 0 #c73e4a; }
-  #menuGrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding-bottom:6px; }
+  #menuGrid, #speakGrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding-bottom:6px; }
+
+  /* ===== speaking ===== */
+  #speakWrap { text-align:center; }
+  #micBtn {
+    width:96px; height:96px; border-radius:50%; border:none; font-size:44px; cursor:pointer;
+    background:linear-gradient(135deg,#ff5f6d,#ff9966); box-shadow:0 6px 0 #c73e4a; margin-top:4px;
+  }
+  #micBtn:active { transform:translateY(3px); box-shadow:0 2px 0 #c73e4a; }
+  #micBtn.on { background:linear-gradient(135deg,#00c853,#69f0ae); box-shadow:0 6px 0 #00913c; animation:micPulse 1s infinite; }
+  @keyframes micPulse { 50% { transform:scale(1.1); } }
+  #micStatus { color:#fff; font-weight:bold; font-size:14px; text-shadow:1px 1px 0 rgba(0,0,0,.3); min-height:22px; margin-top:8px; }
+  #heardBox {
+    display:none; background:#fff; border-radius:14px; padding:8px 12px; margin:8px auto 0; max-width:320px;
+    font-size:15px; color:#333; box-shadow:0 3px 0 rgba(0,0,0,.15); word-break:break-word;
+  }
+  #selfRow { display:flex; gap:10px; justify-content:center; margin-top:12px; }
   .menuCard {
     border:none; border-radius:20px; padding:13px 6px; cursor:pointer; text-align:center;
     box-shadow:0 5px 0 rgba(0,0,0,.22); color:#fff; font-family:inherit;
@@ -218,6 +234,11 @@
         <button class="menuCard" style="background:#ab47bc;" onclick="startSession('listen')"><span class="em">🎧</span><span class="nm">リスニング</span><span class="ds">音をきいて いみを当てる</span></button>
         <button class="menuCard" style="background:#ef5350;" onclick="startSession('spell')"><span class="em">🧩</span><span class="nm">スペルビルダー</span><span class="ds">文字をならべて単語をつくる</span></button>
       </div>
+      <div style="text-align:center;color:#fff;font-weight:bold;font-size:13px;text-shadow:1px 1px 0 #2f4dd0;margin:2px 0 4px;">▼ スピーキング(声に出して話す練習!)</div>
+      <div id="speakGrid">
+        <button class="menuCard" style="background:#ff7043;" onclick="startSpeak('word')"><span class="em">🎤</span><span class="nm">たんご発音チャレンジ</span><span class="ds">単語を発音→マイクで判定</span></button>
+        <button class="menuCard" style="background:#26a69a;" onclick="startSpeak('phrase')"><span class="em">🗣️</span><span class="nm">かいわフレーズ</span><span class="ds">日常会話120フレーズを発音</span></button>
+      </div>
       <div style="text-align:center;color:#fff;font-weight:bold;font-size:13px;text-shadow:1px 1px 0 #2f4dd0;margin:2px 0 4px;">▼ 出題ジャンル</div>
       <div id="catRow"></div>
       <button id="bookBtn" onclick="showBook()">📖 たんご図鑑(おぼえた単語をチェック)</button>
@@ -248,6 +269,15 @@
         <div id="spellCtrl">
           <button class="sBtn" onclick="spellBack()">⌫ もどす</button>
           <button class="sBtn" onclick="spellHint()">💡 ヒント</button>
+        </div>
+      </div>
+      <div id="speakWrap" style="display:none;">
+        <button id="micBtn" onclick="micTap()">🎤</button>
+        <div id="micStatus"></div>
+        <div id="heardBox"></div>
+        <div id="selfRow">
+          <button class="sBtn" onclick="speakSelfOK()">✅ 言えた!</button>
+          <button class="sBtn" onclick="speakGiveUp()">⏭ つぎへ</button>
         </div>
       </div>
       <div id="fb"></div>
@@ -906,9 +936,85 @@ LEVELS.forEach((L, li) => L.cats.forEach((c, ci) => c.w.forEach(([en, ja, kana],
 })));
 const TOTAL = WORDS.length;
 
+// ---------- かいわフレーズ(スピーキング用・120フレーズ) ----------
+const PHRASES = [
+{n:"あいさつ",e:"👋",w:[
+["Good morning.","おはよう","グッド モーニング"],["Good night.","おやすみなさい","グッド ナイト"],
+["How are you?","元気?","ハウ アー ユー"],["I'm fine, thank you.","元気だよ、ありがとう","アイム ファイン、サンキュー"],
+["Nice to meet you.","はじめまして","ナイス トゥ ミーチュー"],["See you later.","またあとでね","シー ユー レイター"],
+["Have a nice day.","よい一日を!","ハブ ア ナイス デイ"],["Thank you so much.","本当にありがとう","サンキュー ソー マッチ"],
+["You're welcome.","どういたしまして","ユア ウェルカム"],["No problem.","問題ないよ","ノー プロブレム"],
+["Long time no see.","久しぶり!","ロング タイム ノー シー"],["Take care.","気をつけてね","テイク ケア"]]},
+{n:"じこしょうかい",e:"🙋",w:[
+["My name is Ken.","私の名前はケンです","マイ ネーム イズ ケン"],["I'm from Japan.","日本から来ました","アイム フロム ジャパン"],
+["I'm twelve years old.","12歳です","アイム トゥエルブ イヤーズ オールド"],["I like music.","音楽が好きです","アイ ライク ミュージック"],
+["I live in Tokyo.","東京に住んでいます","アイ リブ イン トーキョー"],["I have a dog.","犬を飼っています","アイ ハブ ア ドッグ"],
+["My hobby is reading.","趣味は読書です","マイ ホビー イズ リーディング"],["I'm a student.","学生です","アイム ア ステューデント"],
+["This is my friend.","こちらは私の友達です","ディス イズ マイ フレンド"],["I can play the piano.","ピアノが弾けます","アイ キャン プレイ ザ ピアノ"],
+["I want to be a singer.","歌手になりたいです","アイ ウォント トゥ ビー ア シンガー"],["I'm learning English.","英語を勉強中です","アイム ラーニング イングリッシュ"]]},
+{n:"きもち",e:"😊",w:[
+["I'm so happy.","とても嬉しい!","アイム ソー ハッピー"],["I'm tired.","疲れた","アイム タイアード"],
+["That's great!","すごいね!","ザッツ グレイト"],["Sounds fun.","楽しそう!","サウンズ ファン"],
+["I'm excited.","わくわくする!","アイム エキサイテッド"],["Don't worry.","心配しないで","ドント ウォーリー"],
+["That's too bad.","残念だったね","ザッツ トゥー バッド"],["I love it!","大好き!","アイ ラブ イット"],
+["No way!","まさか!ありえない!","ノー ウェイ"],["Good luck!","がんばってね!","グッド ラック"],
+["Congratulations!","おめでとう!","コングラチュレーションズ"],["I'm proud of you.","あなたを誇りに思うよ","アイム プラウド オブ ユー"]]},
+{n:"おかいもの",e:"🛍️",w:[
+["How much is this?","これはいくらですか?","ハウ マッチ イズ ディス"],["Can I try it on?","試着してもいいですか?","キャン アイ トライ イット オン"],
+["I'll take it.","これをください","アイル テイク イット"],["Do you have a bigger one?","もっと大きいのはありますか?","ドゥ ユー ハブ ア ビガー ワン"],
+["It's too expensive.","高すぎます","イッツ トゥー イクスペンシブ"],["Can I pay by card?","カードで払えますか?","キャン アイ ペイ バイ カード"],
+["I'm just looking.","見ているだけです","アイム ジャスト ルッキング"],["Where is the restroom?","トイレはどこですか?","ウェア イズ ザ レストルーム"],
+["Can I have a bag?","袋をもらえますか?","キャン アイ ハブ ア バッグ"],["What time do you close?","何時に閉まりますか?","ワット タイム ドゥ ユー クローズ"],
+["This one, please.","これをお願いします","ディス ワン、プリーズ"],["It's on sale.","セール中です","イッツ オン セイル"]]},
+{n:"レストラン",e:"🍽️",w:[
+["A table for two, please.","2人席をお願いします","ア テーブル フォー トゥー、プリーズ"],["Can I see the menu?","メニューを見せてもらえますか?","キャン アイ シー ザ メニュー"],
+["I'll have this one.","これにします","アイル ハブ ディス ワン"],["What do you recommend?","おすすめは何ですか?","ワット ドゥ ユー レコメンド"],
+["Water, please.","お水をください","ウォーター、プリーズ"],["It's delicious!","おいしい!","イッツ デリシャス"],
+["Check, please.","お会計をお願いします","チェック、プリーズ"],["Are you ready to order?","ご注文はお決まりですか?","アー ユー レディ トゥ オーダー"],
+["I'm full.","お腹いっぱいです","アイム フル"],["To go, please.","持ち帰りでお願いします","トゥ ゴー、プリーズ"],
+["One coffee, please.","コーヒーを1つください","ワン コーヒー、プリーズ"],["Is this spicy?","これは辛いですか?","イズ ディス スパイシー"]]},
+{n:"みちあんない",e:"🗺️",w:[
+["Where is the station?","駅はどこですか?","ウェア イズ ザ ステーション"],["Go straight.","まっすぐ進んで","ゴー ストレイト"],
+["Turn left at the corner.","角を左に曲がって","ターン レフト アット ザ コーナー"],["It's next to the bank.","銀行の隣です","イッツ ネクスト トゥ ザ バンク"],
+["How long does it take?","どのくらいかかりますか?","ハウ ロング ダズ イット テイク"],["I'm lost.","道に迷いました","アイム ロスト"],
+["Is it far from here?","ここから遠いですか?","イズ イット ファー フロム ヒア"],["Can you help me?","手伝ってもらえますか?","キャン ユー ヘルプ ミー"],
+["It's over there.","あそこです","イッツ オーバー ゼア"],["Take the train.","電車に乗って","テイク ザ トレイン"],
+["Get off at the next stop.","次の駅で降りて","ゲット オフ アット ザ ネクスト ストップ"],["You can't miss it.","すぐ分かりますよ","ユー キャント ミス イット"]]},
+{n:"がっこう・しごと",e:"🏫",w:[
+["I have a question.","質問があります","アイ ハブ ア クエスチョン"],["Can you say that again?","もう一度言ってもらえますか?","キャン ユー セイ ザット アゲイン"],
+["What does this mean?","これはどういう意味ですか?","ワット ダズ ディス ミーン"],["How do you spell it?","どう綴りますか?","ハウ ドゥ ユー スペル イット"],
+["I don't understand.","分かりません","アイ ドント アンダースタンド"],["I see.","なるほど","アイ シー"],
+["Let me try.","やってみるね","レット ミー トライ"],["I did it!","できた!","アイ ディド イット"],
+["I'm done.","終わりました","アイム ダン"],["Wait a minute.","ちょっと待って","ウェイト ア ミニット"],
+["Hurry up!","急いで!","ハリー アップ"],["Let's begin.","始めましょう","レッツ ビギン"]]},
+{n:"でんわ・やくそく",e:"📞",w:[
+["Hello, this is Ken.","もしもし、ケンです","ハロー、ディス イズ ケン"],["Just a moment, please.","少々お待ちください","ジャスト ア モーメント、プリーズ"],
+["Are you free tomorrow?","明日ひま?","アー ユー フリー トゥモロー"],["How about three o'clock?","3時はどう?","ハウ アバウト スリー オクロック"],
+["Sounds good.","いいね","サウンズ グッド"],["I'm on my way.","今向かってるよ","アイム オン マイ ウェイ"],
+["I'll be there soon.","すぐ着くよ","アイル ビー ゼア スーン"],["Sorry, I'm late.","遅れてごめん","ソーリー、アイム レイト"],
+["Let's meet at the station.","駅で会おう","レッツ ミート アット ザ ステーション"],["Call me later.","あとで電話して","コール ミー レイター"],
+["See you then.","じゃあそのときに","シー ユー ゼン"],["What's up?","どうしたの?元気?","ワッツ アップ"]]},
+{n:"りょこう",e:"✈️",w:[
+["Where are you from?","どちらの出身ですか?","ウェア アー ユー フロム"],["I'd like to check in.","チェックインをお願いします","アイド ライク トゥ チェックイン"],
+["Do you speak Japanese?","日本語を話せますか?","ドゥ ユー スピーク ジャパニーズ"],["Can you take a picture?","写真を撮ってもらえますか?","キャン ユー テイク ア ピクチャー"],
+["Where can I buy a ticket?","切符はどこで買えますか?","ウェア キャン アイ バイ ア チケット"],["Is this seat taken?","この席、空いていますか?","イズ ディス シート テイクン"],
+["I have a reservation.","予約しています","アイ ハブ ア リザベーション"],["What time does it leave?","何時に出発しますか?","ワット タイム ダズ イット リーブ"],
+["How was your trip?","旅行はどうだった?","ハウ ワズ ユア トリップ"],["I want to go here.","ここに行きたいです","アイ ウォント トゥ ゴー ヒア"],
+["Say cheese!","はい、チーズ!","セイ チーズ"],["Have a safe trip!","気をつけて行ってらっしゃい!","ハブ ア セイフ トリップ"]]},
+{n:"こまったとき",e:"🆘",w:[
+["Help me, please.","助けてください","ヘルプ ミー、プリーズ"],["I feel sick.","気分が悪いです","アイ フィール シック"],
+["Please call a doctor.","医者を呼んでください","プリーズ コール ア ドクター"],["I lost my wallet.","財布をなくしました","アイ ロスト マイ ウォレット"],
+["What should I do?","どうすればいいですか?","ワット シュッド アイ ドゥ"],["Please speak slowly.","ゆっくり話してください","プリーズ スピーク スローリー"],
+["One more time, please.","もう一回お願いします","ワン モア タイム、プリーズ"],["Could you write it down?","書いてもらえますか?","クッド ユー ライト イット ダウン"],
+["I don't know.","分かりません、知りません","アイ ドント ノー"],["It's okay.","大丈夫だよ","イッツ オーケイ"],
+["Take it easy.","気楽にね","テイク イット イージー"],["Everything will be fine.","きっとうまくいくよ","エブリシング ウィル ビー ファイン"]]}
+];
+const PWORDS = [];
+PHRASES.forEach((c, ci) => c.w.forEach((w, wi) => PWORDS.push({ id: 'p' + ci + '_' + wi, en: w[0], ja: w[1], kana: w[2], ci })));
+
 // ---------- セーブデータ ----------
 const LS = 'eitangoQuest_v1';
-function defState(){ return { stars:0, streak:0, lastDay:'', todayDay:'', todayN:0, words:{}, freeLv:[] }; }
+function defState(){ return { stars:0, streak:0, lastDay:'', todayDay:'', todayN:0, words:{}, freeLv:[], phr:{} }; }
 let S;
 try { S = Object.assign(defState(), JSON.parse(localStorage.getItem(LS) || '{}')); }
 catch(e){ S = defState(); }
@@ -1066,7 +1172,135 @@ function startSession(mode){
   show('scrQuiz');
   nextQ();
 }
-function retrySession(){ startSession(ses.mode); }
+function retrySession(){ ses.kind ? startSpeak(ses.kind) : startSession(ses.mode); }
+
+// ---------- スピーキング ----------
+const SRCls = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+let rec = null, speakTries = 0;
+function pstat(id){ return S.phr[id] || (S.phr[id] = { ok:0, ng:0 }); }
+
+function startSpeak(kind){
+  ac();
+  let items;
+  if(kind === 'phrase'){
+    const fresh = [], hard = [], rest = [];
+    PWORDS.forEach(w => {
+      const p = S.phr[w.id];
+      if(!p) fresh.push(w); else if(p.ng > p.ok) hard.push(w); else rest.push(w);
+    });
+    items = shuffle(fresh).concat(shuffle(hard), shuffle(rest)).slice(0, N_Q);
+  } else {
+    const pool = WORDS.filter(w => w.li === selLevel && (selCat < 0 || w.ci === selCat));
+    items = pickWords(pool, N_Q);
+  }
+  ses = { qs: items.map(w => ({ w, mode:'speak' })), i:0, ok:0, wrong:[], combo:0, maxCombo:0, gained:0, mode:'speak', kind };
+  show('scrQuiz');
+  nextQ();
+}
+
+function micStatus(t){ document.getElementById('micStatus').textContent = t; }
+function setMic(on){ document.getElementById('micBtn').classList.toggle('on', on); }
+
+function micTap(){
+  if(!SRCls || answered) return;
+  if(rec){ try{ rec.abort(); }catch(e){} rec = null; setMic(false); micStatus('もう一度🎤を押してね'); return; }
+  try{ speechSynthesis.cancel(); }catch(e){}
+  rec = new SRCls();
+  rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 5;
+  rec.onresult = ev => {
+    const alts = Array.from(ev.results[0]).map(a => a.transcript);
+    handleSpeech(alts);
+  };
+  rec.onerror = ev => {
+    setMic(false); rec = null;
+    micStatus(ev.error === 'not-allowed' ? '❗ マイクの許可が必要だよ(ブラウザの設定を確認してね)'
+                                         : '❗ 聞き取れなかった…もう一度🎤を押すか「言えた!」で自己判定してね');
+  };
+  rec.onend = () => { setMic(false); rec = null; };
+  try{ rec.start(); setMic(true); micStatus('🎧 聞いてるよ…話してね!'); }
+  catch(e){ setMic(false); rec = null; }
+}
+
+// 発音判定: 認識候補と目標文をゆるく比較
+const NUMW = { '1':'one','2':'two','3':'three','4':'four','5':'five','6':'six','7':'seven','8':'eight','9':'nine','10':'ten','11':'eleven','12':'twelve','100':'hundred','1000':'thousand' };
+function normSpeech(s){
+  return s.toLowerCase().replace(/[’´`]/g, "'").replace(/'/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ').replace(/\b\d+\b/g, n => NUMW[n] || n)
+    .replace(/\s+/g, ' ').trim();
+}
+function lev(a, b){
+  const m = a.length, n = b.length;
+  if(!m) return n; if(!n) return m;
+  let prev = Array.from({length:n+1}, (_, i) => i);
+  for(let i = 1; i <= m; i++){
+    const cur = [i];
+    for(let j = 1; j <= n; j++)
+      cur[j] = Math.min(prev[j] + 1, cur[j-1] + 1, prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+}
+function matchSpeech(target, alts){
+  const t = normSpeech(target);
+  const tt = t.split(' ');
+  for(const raw of alts){
+    const h = normSpeech(raw);
+    if(!h) continue;
+    if(h === t || h.includes(t)) return true;
+    if(lev(h, t) <= Math.max(1, Math.floor(t.length * 0.2))) return true;
+    const hh = h.split(' ');
+    let hit = 0;
+    tt.forEach(w => {
+      if(hh.some(x => x === w || lev(x, w) <= (w.length >= 5 ? 2 : w.length >= 3 ? 1 : 0))) hit++;
+    });
+    if(hit / tt.length >= 0.75) return true;
+  }
+  return false;
+}
+
+function handleSpeech(alts){
+  if(answered || !cur || cur.mode !== 'speak') return;
+  const hb = document.getElementById('heardBox');
+  hb.style.display = 'block';
+  hb.textContent = '👂 ' + (alts[0] || '…');
+  if(matchSpeech(cur.w.en, alts)){ speakCorrect('🎉 発音バッチリ!'); }
+  else {
+    speakTries++;
+    sBuzz();
+    micStatus(speakTries >= 2 ? '🤔 おしい!🔊で見本をきいてもう一度。言えていたら「言えた!」でもOK'
+                              : '🤔 うーん、ちがうふうに聞こえたみたい。もう一度🎤!');
+  }
+}
+
+function speakCorrect(msg){
+  if(answered) return; answered = true;
+  if(rec){ try{ rec.abort(); }catch(e){} rec = null; setMic(false); }
+  const w = cur.w;
+  ses.ok++; ses.combo++; ses.maxCombo = Math.max(ses.maxCombo, ses.combo);
+  const gain = 1 + (ses.combo >= 3 ? 1 : 0) + (ses.combo >= 7 ? 1 : 0);
+  ses.gained += gain; S.stars += gain; S.todayN++;
+  if(ses.kind === 'phrase') pstat(w.id).ok++;
+  save();
+  sCombo(ses.combo);
+  document.getElementById('starN').textContent = S.stars;
+  const box = document.getElementById('starBox');
+  box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
+  document.getElementById('fb').textContent = msg + ' +' + gain + '⭐' + (ses.combo >= 2 ? ' 🔥×' + ses.combo : '');
+  ses.i++; setTimeout(nextQ, 1200);
+}
+function speakSelfOK(){ if(cur && cur.mode === 'speak' && !answered) speakCorrect('👍 いいぞ、その調子!'); }
+function speakGiveUp(){
+  if(!cur || cur.mode !== 'speak' || answered) return;
+  answered = true;
+  if(rec){ try{ rec.abort(); }catch(e){} rec = null; setMic(false); }
+  const w = cur.w;
+  ses.combo = 0; ses.wrong.push(w); S.todayN++;
+  if(ses.kind === 'phrase') pstat(w.id).ng++;
+  save();
+  document.getElementById('fb').textContent = 'OK、あとで練習しよう!🔊 ' + w.kana;
+  speak(w.en);
+  ses.i++; setTimeout(nextQ, 1800);
+}
 
 function distractors(w, field){
   const same = WORDS.filter(x => x.li === w.li && x.ci === w.ci && x.id !== w.id && x[field] !== w[field]);
@@ -1094,8 +1328,23 @@ function nextQ(){
   const ch = document.getElementById('choices'), sp = document.getElementById('spellWrap');
   const kana = document.getElementById('qKana');
   ch.innerHTML = ''; ch.style.display = 'grid'; sp.style.display = 'none';
+  document.getElementById('speakWrap').style.display = 'none';
   document.getElementById('speakBtn').style.display = 'inline-block';
 
+  if(mode === 'speak'){
+    document.getElementById('qMode').textContent = ses.kind === 'phrase' ? '🗣️ かいわフレーズ' : '🎤 たんご発音チャレンジ';
+    main.textContent = w.en; kana.textContent = '🗣️ ' + w.kana;
+    sub.textContent = '「' + w.ja + '」';
+    ch.style.display = 'none';
+    document.getElementById('speakWrap').style.display = 'block';
+    document.getElementById('heardBox').style.display = 'none';
+    document.getElementById('micBtn').style.display = SRCls ? 'inline-block' : 'none';
+    micStatus(SRCls ? '🔊見本をきいて、🎤を押して英語で言ってみよう!'
+                    : 'この端末は音声認識が使えないみたい。見本のあとに声に出して「言えた!」を押してね');
+    speakTries = 0;
+    speak(w.en);
+    return;
+  }
   if(mode === 'enja'){
     main.textContent = w.en; kana.textContent = '🗣️ ' + w.kana;
     sub.textContent = 'この単語のいみは?(🔊で発音)';
