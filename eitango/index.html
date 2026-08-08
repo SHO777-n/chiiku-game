@@ -237,7 +237,7 @@
       <div style="text-align:center;color:#fff;font-weight:bold;font-size:13px;text-shadow:1px 1px 0 #2f4dd0;margin:2px 0 4px;">▼ スピーキング(声に出して話す練習!)</div>
       <div id="speakGrid">
         <button class="menuCard" style="background:#ff7043;" onclick="startSpeak('word')"><span class="em">🎤</span><span class="nm">たんご発音チャレンジ</span><span class="ds">単語を発音→マイクで判定</span></button>
-        <button class="menuCard" style="background:#26a69a;" onclick="startSpeak('phrase')"><span class="em">🗣️</span><span class="nm">かいわフレーズ</span><span class="ds">日常会話120フレーズを発音</span></button>
+        <button class="menuCard" style="background:#26a69a;" onclick="startSpeak('phrase')"><span class="em">🗣️</span><span class="nm">かいわフレーズ</span><span class="ds">日常会話120・レベルに連動</span></button>
       </div>
       <div style="text-align:center;color:#fff;font-weight:bold;font-size:13px;text-shadow:1px 1px 0 #2f4dd0;margin:2px 0 4px;">▼ 出題ジャンル</div>
       <div id="catRow"></div>
@@ -1009,8 +1009,31 @@ const PHRASES = [
 ["I don't know.","分かりません、知りません","アイ ドント ノー"],["It's okay.","大丈夫だよ","イッツ オーケイ"],
 ["Take it easy.","気楽にね","テイク イット イージー"],["Everything will be fine.","きっとうまくいくよ","エブリシング ウィル ビー ファイン"]]}
 ];
+// フレーズの語彙レベル(1〜4)。選択中の単語レベル以下から出題される
+const PLV = {
+"Good morning.":1,"Good night.":1,"How are you?":1,"I'm fine, thank you.":1,"Nice to meet you.":1,"See you later.":1,
+"Have a nice day.":2,"Thank you so much.":1,"You're welcome.":1,"No problem.":1,"Long time no see.":2,"Take care.":1,
+"My name is Ken.":1,"I'm from Japan.":1,"I'm twelve years old.":2,"I like music.":1,"I live in Tokyo.":2,"I have a dog.":1,
+"My hobby is reading.":2,"I'm a student.":1,"This is my friend.":1,"I can play the piano.":2,"I want to be a singer.":3,"I'm learning English.":2,
+"I'm so happy.":1,"I'm tired.":1,"That's great!":1,"Sounds fun.":2,"I'm excited.":2,"Don't worry.":2,
+"That's too bad.":2,"I love it!":1,"No way!":2,"Good luck!":1,"Congratulations!":2,"I'm proud of you.":3,
+"How much is this?":2,"Can I try it on?":3,"I'll take it.":2,"Do you have a bigger one?":3,"It's too expensive.":3,"Can I pay by card?":3,
+"I'm just looking.":3,"Where is the restroom?":2,"Can I have a bag?":2,"What time do you close?":3,"This one, please.":1,"It's on sale.":3,
+"A table for two, please.":3,"Can I see the menu?":2,"I'll have this one.":2,"What do you recommend?":3,"Water, please.":1,"It's delicious!":1,
+"Check, please.":3,"Are you ready to order?":3,"I'm full.":2,"To go, please.":3,"One coffee, please.":1,"Is this spicy?":2,
+"Where is the station?":2,"Go straight.":1,"Turn left at the corner.":3,"It's next to the bank.":3,"How long does it take?":3,"I'm lost.":2,
+"Is it far from here?":3,"Can you help me?":2,"It's over there.":1,"Take the train.":2,"Get off at the next stop.":3,"You can't miss it.":4,
+"I have a question.":1,"Can you say that again?":3,"What does this mean?":3,"How do you spell it?":3,"I don't understand.":2,"I see.":1,
+"Let me try.":2,"I did it!":1,"I'm done.":2,"Wait a minute.":2,"Hurry up!":1,"Let's begin.":1,
+"Hello, this is Ken.":2,"Just a moment, please.":3,"Are you free tomorrow?":2,"How about three o'clock?":2,"Sounds good.":1,"I'm on my way.":2,
+"I'll be there soon.":3,"Sorry, I'm late.":2,"Let's meet at the station.":3,"Call me later.":2,"See you then.":1,"What's up?":3,
+"Where are you from?":2,"I'd like to check in.":4,"Do you speak Japanese?":2,"Can you take a picture?":3,"Where can I buy a ticket?":4,"Is this seat taken?":4,
+"I have a reservation.":4,"What time does it leave?":4,"How was your trip?":3,"I want to go here.":2,"Say cheese!":1,"Have a safe trip!":3,
+"Help me, please.":1,"I feel sick.":2,"Please call a doctor.":3,"I lost my wallet.":3,"What should I do?":3,"Please speak slowly.":2,
+"One more time, please.":2,"Could you write it down?":4,"I don't know.":1,"It's okay.":1,"Take it easy.":3,"Everything will be fine.":4
+};
 const PWORDS = [];
-PHRASES.forEach((c, ci) => c.w.forEach((w, wi) => PWORDS.push({ id: 'p' + ci + '_' + wi, en: w[0], ja: w[1], kana: w[2], ci })));
+PHRASES.forEach((c, ci) => c.w.forEach((w, wi) => PWORDS.push({ id: 'p' + ci + '_' + wi, en: w[0], ja: w[1], kana: w[2], ci, lv: PLV[w[0]] || 1 })));
 
 // ---------- セーブデータ ----------
 const LS = 'eitangoQuest_v1';
@@ -1183,12 +1206,17 @@ function startSpeak(kind){
   ac();
   let items;
   if(kind === 'phrase'){
+    // 選択中の単語レベルに連動: そのレベル以下のフレーズから、今のレベルを優先して出題
+    const cap = selLevel + 1;
+    const pool = PWORDS.filter(w => w.lv <= cap);
     const fresh = [], hard = [], rest = [];
-    PWORDS.forEach(w => {
+    pool.forEach(w => {
       const p = S.phr[w.id];
       if(!p) fresh.push(w); else if(p.ng > p.ok) hard.push(w); else rest.push(w);
     });
-    items = shuffle(fresh).concat(shuffle(hard), shuffle(rest)).slice(0, N_Q);
+    const pri = a => a.lv === cap ? 0 : 1;
+    const byPri = arr => shuffle(arr).sort((a, b) => pri(a) - pri(b));
+    items = byPri(fresh).concat(byPri(hard), byPri(rest)).slice(0, N_Q);
   } else {
     const pool = WORDS.filter(w => w.li === selLevel && (selCat < 0 || w.ci === selCat));
     items = pickWords(pool, N_Q);
@@ -1280,6 +1308,7 @@ function speakCorrect(msg){
   const gain = 1 + (ses.combo >= 3 ? 1 : 0) + (ses.combo >= 7 ? 1 : 0);
   ses.gained += gain; S.stars += gain; S.todayN++;
   if(ses.kind === 'phrase') pstat(w.id).ok++;
+  else srsOk(w.id); // 発音できた単語は「おぼえた」ゲージも前進(レベル解放に貢献)
   save();
   sCombo(ses.combo);
   document.getElementById('starN').textContent = S.stars;
@@ -1332,7 +1361,9 @@ function nextQ(){
   document.getElementById('speakBtn').style.display = 'inline-block';
 
   if(mode === 'speak'){
-    document.getElementById('qMode').textContent = ses.kind === 'phrase' ? '🗣️ かいわフレーズ' : '🎤 たんご発音チャレンジ';
+    document.getElementById('qMode').textContent = ses.kind === 'phrase'
+      ? '🗣️ かいわフレーズ(Lv' + w.lv + ')'
+      : '🎤 たんご発音チャレンジ(Lv' + (w.li + 1) + ')';
     main.textContent = w.en; kana.textContent = '🗣️ ' + w.kana;
     sub.textContent = '「' + w.ja + '」';
     ch.style.display = 'none';
