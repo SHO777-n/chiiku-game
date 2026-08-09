@@ -60,7 +60,25 @@
   }
   #dailyBtn small { display:block; font-size:13px; font-weight:normal; margin-top:3px; }
   #dailyBtn:active { transform:translateY(4px); box-shadow:0 2px 0 #c73e4a; }
-  #menuGrid, #speakGrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding-bottom:6px; }
+  #menuGrid, #speakGrid, #useGrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding-bottom:6px; }
+
+  /* ===== sentence builder ===== */
+  #bLine {
+    min-height:56px; background:#f1f3f8; border:3px dashed #b9c2e0; border-radius:14px;
+    display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px; margin-bottom:12px;
+  }
+  .bWord {
+    background:#e8edff; border:2px solid #4a6cf7; border-radius:10px; padding:6px 10px;
+    font-size:16px; font-weight:bold; color:#222;
+  }
+  #bTiles { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+  .bTile {
+    border:none; border-radius:12px; padding:9px 13px; font-size:17px; font-weight:bold; font-family:inherit;
+    background:#ffca28; color:#5d3800; cursor:pointer; box-shadow:0 4px 0 #cf9b00;
+  }
+  .bTile:active { transform:translateY(3px); box-shadow:0 1px 0 #cf9b00; }
+  .bTile.used { visibility:hidden; }
+  #bCtrl { display:flex; gap:10px; justify-content:center; margin-top:14px; }
 
   /* ===== speaking ===== */
   #speakWrap { text-align:center; }
@@ -239,6 +257,11 @@
         <button class="menuCard" style="background:#ff7043;" onclick="startSpeak('word')"><span class="em">🎤</span><span class="nm">たんご発音チャレンジ</span><span class="ds">単語を発音→マイクで判定</span></button>
         <button class="menuCard" style="background:#26a69a;" onclick="startSpeak('phrase')"><span class="em">🗣️</span><span class="nm">かいわフレーズ</span><span class="ds">日常会話120・レベルに連動</span></button>
       </div>
+      <div style="text-align:center;color:#fff;font-weight:bold;font-size:13px;text-shadow:1px 1px 0 #2f4dd0;margin:2px 0 4px;">▼ つかいかた(おぼえた単語を例文で使う!)</div>
+      <div id="useGrid">
+        <button class="menuCard" style="background:#5c6bc0;" onclick="startUse('cloze')"><span class="em">🕳️</span><span class="nm">あなうめクイズ</span><span class="ds">例文の空所に合う単語を選ぶ</span></button>
+        <button class="menuCard" style="background:#8d6e63;" onclick="startUse('build')"><span class="em">🧱</span><span class="nm">えいさくぶん</span><span class="ds">単語をならべて英文をつくる</span></button>
+      </div>
       <div style="text-align:center;color:#fff;font-weight:bold;font-size:13px;text-shadow:1px 1px 0 #2f4dd0;margin:2px 0 4px;">▼ 出題ジャンル</div>
       <div id="catRow"></div>
       <button id="bookBtn" onclick="showBook()">📖 たんご図鑑(おぼえた単語をチェック)</button>
@@ -278,6 +301,13 @@
         <div id="selfRow">
           <button class="sBtn" onclick="speakSelfOK()">✅ 言えた!</button>
           <button class="sBtn" onclick="speakGiveUp()">⏭ つぎへ</button>
+        </div>
+      </div>
+      <div id="buildWrap" style="display:none;">
+        <div id="bLine"></div>
+        <div id="bTiles"></div>
+        <div id="bCtrl">
+          <button class="sBtn" onclick="buildBack()">⌫ もどす</button>
         </div>
       </div>
       <div id="fb"></div>
@@ -1035,9 +1065,197 @@ const PLV = {
 const PWORDS = [];
 PHRASES.forEach((c, ci) => c.w.forEach((w, wi) => PWORDS.push({ id: 'p' + ci + '_' + wi, en: w[0], ja: w[1], kana: w[2], ci, lv: PLV[w[0]] || 1 })));
 
+// ---------- つかいかた例文 [英文, 日本語, ターゲット単語, レベル] ----------
+const SENTS = [
+// === Lv1 ===
+["I eat breakfast at seven.","私は7時に朝ご飯を食べます","breakfast",1],
+["Please open the window.","窓を開けてください","open",1],
+["I drink milk every morning.","毎朝牛乳を飲みます","drink",1],
+["She has a red umbrella.","彼女は赤い傘を持っています","umbrella",1],
+["Let's play in the park.","公園で遊ぼう","park",1],
+["My father drives to work.","父は車で仕事に行きます","work",1],
+["I wash my hands before lunch.","昼ご飯の前に手を洗います","wash",1],
+["The train leaves at nine.","電車は9時に出発します","train",1],
+["This flower is beautiful.","この花は美しいです","beautiful",1],
+["I am hungry now.","今お腹がすいています","hungry",1],
+["My room is small but clean.","私の部屋は小さいけれどきれいです","room",1],
+["We watch TV after dinner.","夕食後にテレビを見ます","watch",1],
+["I go to school by bicycle.","自転車で学校に行きます","bicycle",1],
+["She writes a letter to her friend.","彼女は友達に手紙を書きます","letter",1],
+["The cat is under the table.","猫はテーブルの下にいます","table",1],
+["I read a book every night.","毎晩本を読みます","read",1],
+["He can swim very fast.","彼はとても速く泳げます","fast",1],
+["My mother makes delicious soup.","母はおいしいスープを作ります","soup",1],
+["I brush my teeth every morning.","毎朝歯をみがきます","morning",1],
+["It is sunny today.","今日は晴れです","sunny",1],
+["I want a new bag.","新しいかばんが欲しいです","new",1],
+["The station is near my house.","駅は家の近くです","station",1],
+["Please close the door.","ドアを閉めてください","close",1],
+["We sing songs in music class.","音楽の授業で歌を歌います","music",1],
+["My sister is a nurse.","姉は看護師です","nurse",1],
+["I sleep at ten every day.","毎日10時に寝ます","sleep",1],
+["This question is easy.","この質問は簡単です","question",1],
+["The moon is bright tonight.","今夜は月が明るいです","moon",1],
+["I help my mother on Sunday.","日曜日に母を手伝います","help",1],
+["Which vegetable do you like?","どの野菜が好きですか?","vegetable",1],
+["Every morning I walk with my grandfather.","毎朝祖父と歩きます","walk",1],
+["Summer is my favorite season.","夏は大好きな季節です","summer",1],
+["I study English every day.","毎日英語を勉強します","study",1],
+["The library is quiet.","図書館は静かです","library",1],
+["Today is my birthday.","今日は私の誕生日です","birthday",1],
+["Please wait here.","ここで待ってください","wait",1],
+["I know his name.","彼の名前を知っています","know",1],
+["The sky is blue.","空は青いです","sky",1],
+["We eat rice every day.","毎日ご飯を食べます","rice",1],
+["The doctor is kind.","その医者は優しいです","doctor",1],
+["I listen to music at night.","夜に音楽を聞きます","listen",1],
+["Winter is very cold.","冬はとても寒いです","winter",1],
+["The baby is sleeping now.","赤ちゃんは今眠っています","baby",1],
+["I put my key on the desk.","鍵を机の上に置きます","key",1],
+["Please speak in English.","英語で話してください","speak",1],
+["This apple is sweet.","このりんごは甘いです","apple",1],
+["My family lives in Tokyo.","家族は東京に住んでいます","family",1],
+["I meet my friend at the station.","駅で友達に会います","meet",1],
+["The hospital is next to the bank.","病院は銀行の隣です","hospital",1],
+["I think it will rain.","雨が降ると思います","think",1],
+["I get up early every day.","毎日早く起きます","early",1],
+["Let's take a picture here.","ここで写真を撮ろう","picture",1],
+["My mother is busy today.","母は今日忙しいです","busy",1],
+["I give flowers to my mother.","母に花をあげます","give",1],
+["The sea is very wide.","海はとても広いです","sea",1],
+["Please sit on the chair.","椅子に座ってください","chair",1],
+["I understand this word.","この単語が分かります","understand",1],
+["We clean the classroom together.","一緒に教室を掃除します","classroom",1],
+["Milk is good for your body.","牛乳は体にいいです","body",1],
+["I say goodbye to my teacher.","先生にさようならを言います","teacher",1],
+// === Lv2 ===
+["I borrow books from the library.","図書館で本を借ります","borrow",2],
+["Don't forget your homework.","宿題を忘れないで","forget",2],
+["He always keeps his promise.","彼はいつも約束を守ります","promise",2],
+["I will invite my friends to the party.","友達をパーティーに招待します","invite",2],
+["The movie starts at seven.","映画は7時に始まります","movie",2],
+["She won first prize in the contest.","彼女はコンテストで1位を取りました","contest",2],
+["My uncle lives in a foreign country.","おじは外国に住んでいます","foreign",2],
+["This bridge is very famous.","この橋はとても有名です","famous",2],
+["I feel happy when I sing.","歌うと幸せを感じます","feel",2],
+["We should save water.","水を節約すべきです","save",2],
+["The museum was crowded yesterday.","昨日博物館は混んでいました","crowded",2],
+["Turn off the light before bed.","寝る前に電気を消して","light",2],
+["I hope to see you again.","また会えるといいな","hope",2],
+["My dream is to travel the world.","私の夢は世界を旅することです","dream",2],
+["He caught the ball with one hand.","彼は片手でボールを取りました","ball",2],
+["Please follow me.","私についてきてください","follow",2],
+["The weather will change soon.","天気はすぐに変わるでしょう","change",2],
+["I am learning to cook.","料理を習っています","cook",2],
+["This jacket is too expensive for me.","このジャケットは高すぎます","jacket",2],
+["We enjoyed the festival last night.","昨夜祭りを楽しみました","festival",2],
+["My favorite subject is history.","好きな教科は歴史です","history",2],
+["The elevator is broken today.","エレベーターは今日故障しています","elevator",2],
+["I always carry an umbrella.","いつも傘を持ち歩きます","carry",2],
+["Please pass me the salt.","塩を取ってください","pass",2],
+["The plane will arrive at noon.","飛行機は正午に到着します","arrive",2],
+["I want to join the tennis club.","テニス部に入りたいです","join",2],
+["He laughed at my joke.","彼は私の冗談に笑いました","joke",2],
+["We visited a castle last summer.","去年の夏、城を訪れました","castle",2],
+["My brother can draw well.","弟は絵を描くのが上手です","draw",2],
+["I smell something sweet.","何か甘いにおいがします","smell",2],
+["Please answer my question.","質問に答えてください","answer",2],
+["The wind is strong today.","今日は風が強いです","wind",2],
+["I received a gift from my aunt.","おばから贈り物をもらいました","gift",2],
+["Don't touch the painting.","絵に触らないで","touch",2],
+["The garden is full of flowers.","庭は花でいっぱいです","garden",2],
+["I like this story very much.","この物語が大好きです","story",2],
+["He is a popular singer in Japan.","彼は日本で人気の歌手です","popular",2],
+["I climb the mountain every year.","毎年その山に登ります","climb",2],
+["Wash your hands with soap.","石けんで手を洗って","soap",2],
+["I am ready for the test.","テストの準備ができています","ready",2],
+["Let's go to the beach.","浜辺に行こう","beach",2],
+["Be careful when you cross the street.","通りを渡るときは気をつけて","careful",2],
+["I share my snacks with my sister.","おやつを妹と分けます","share",2],
+["The concert was wonderful.","コンサートは素晴らしかったです","concert",2],
+["Don't kick the door.","ドアを蹴らないで","kick",2],
+["I got a good score on the exam.","試験で良い点を取りました","exam",2],
+["Babies cry at night.","赤ちゃんは夜泣きます","cry",2],
+["I collect old coins.","古いコインを集めています","collect",2],
+["Please choose one card.","カードを1枚選んでください","choose",2],
+["The stars shine in the night sky.","星は夜空で輝きます","shine",2],
+["I practice the piano every day.","毎日ピアノを練習します","practice",2],
+["Let's plan our trip together.","一緒に旅行の計画を立てよう","plan",2],
+["This town has a big library.","この町には大きな図書館があります","town",2],
+["My father can fix anything.","父は何でも直せます","fix",2],
+["I will write a report today.","今日レポートを書きます","report",2],
+["This knife is very sharp.","このナイフはとても鋭いです","knife",2],
+["Did you lock the door?","ドアに鍵をかけた?","lock",2],
+["I miss my old friends.","昔の友達が恋しいです","miss",2],
+["Look at that big wave.","あの大きな波を見て","wave",2],
+["Hurry up, or we will be late.","急いで、遅れるよ","hurry",2],
+// === Lv3 ===
+["I want to improve my English.","英語を上達させたいです","improve",3],
+["Please explain the rule again.","ルールをもう一度説明してください","explain",3],
+["We must protect the environment.","環境を守らなければなりません","environment",3],
+["I agree with your opinion.","あなたの意見に賛成です","opinion",3],
+["Earthquakes can destroy houses.","地震は家を破壊することがあります","destroy",3],
+["She has the courage to try.","彼女には挑戦する勇気があります","courage",3],
+["Regular exercise makes you healthy.","定期的な運動は健康にいいです","healthy",3],
+["Don't be afraid of failure.","失敗を恐れないで","failure",3],
+["This hotel has good service.","このホテルはサービスがいいです","service",3],
+["Please describe the picture.","その絵を描写してください","describe",3],
+["I need more information about the event.","そのイベントの情報がもっと必要です","information",3],
+["What is the purpose of this meeting?","この会議の目的は何ですか","purpose",3],
+["Take this medicine for your headache.","頭痛にはこの薬を飲んで","headache",3],
+["My salary will increase next year.","来年給料が上がります","increase",3],
+["You should apologize to her.","彼女に謝るべきだよ","apologize",3],
+["I can't decide which to buy.","どちらを買うか決められません","decide",3],
+["The population of this city is growing.","この都市の人口は増えています","population",3],
+["Let's discuss the plan tomorrow.","明日その計画を話し合おう","discuss",3],
+["It is hard to express my feelings.","気持ちを表現するのは難しいです","express",3],
+["The result of the test was perfect.","テストの結果は完璧でした","result",3],
+["I respect my grandfather very much.","祖父をとても尊敬しています","respect",3],
+["This is an easy method to remember words.","これは単語を覚える簡単な方法です","method",3],
+["The situation is getting better.","状況は良くなってきています","situation",3],
+["Please compare these two products.","この2つの製品を比べてください","compare",3],
+["I have confidence in my English.","自分の英語に自信があります","confidence",3],
+["The new law starts next month.","新しい法律は来月から始まります","law",3],
+["Volunteers support people in need.","ボランティアは困っている人を支援します","support",3],
+["What is the reason for your choice?","あなたの選択の理由は何ですか","reason",3],
+["I enjoy reading a novel on weekends.","週末に小説を読むのを楽しみます","novel",3],
+["Thank you for your advice.","アドバイスをありがとう","advice",3],
+["The theory is difficult to prove.","その理論を証明するのは難しいです","prove",3],
+["I want to open a bank account.","銀行口座を開きたいです","bank account",3],
+["The audience was very large.","聴衆はとても多かったです","audience",3],
+["Everyone has a different personality.","みんな性格が違います","personality",3],
+["We celebrate his success tonight.","今夜彼の成功を祝います","celebrate",3],
+["Does this price include tax?","この値段は税込みですか","include",3],
+["I trust my best friend.","親友を信頼しています","trust",3],
+["A typhoon is coming this weekend.","今週末台風が来ます","typhoon",3],
+["We should reduce plastic waste.","プラスチックごみを減らすべきです","reduce",3],
+["My goal is to become an expert.","目標は専門家になることです","expert",3],
+// === Lv4 ===
+["We need to analyze the data first.","まずデータを分析する必要があります","analyze",4],
+["The contract ends next year.","契約は来年終わります","contract",4],
+["New technology changes our lives.","新しい技術は私たちの生活を変えます","technology",4],
+["There is no evidence against him.","彼に不利な証拠はありません","evidence",4],
+["Please confirm your reservation.","予約を確認してください","confirm",4],
+["The economy is growing slowly.","経済はゆっくり成長しています","economy",4],
+["She made a great contribution to science.","彼女は科学に大きな貢献をしました","contribution",4],
+["We should consider his opinion.","彼の意見をよく考えるべきです","consider",4],
+["The committee will announce the decision.","委員会が決定を発表します","decision",4],
+["I intend to study abroad next year.","来年留学するつもりです","intend",4],
+["The museum will exhibit ancient art.","博物館は古代の美術を展示します","exhibit",4],
+["His behavior surprised everyone.","彼の振る舞いはみんなを驚かせました","behavior",4],
+["Don't ignore my advice.","私のアドバイスを無視しないで","ignore",4],
+["We consume too much energy.","私たちはエネルギーを使いすぎています","consume",4],
+["You can overcome your fear.","恐れは乗り越えられるよ","overcome",4],
+["The manager will evaluate our work.","部長が私たちの仕事を評価します","evaluate",4],
+["The game industry is growing fast.","ゲーム産業は急成長しています","industry",4],
+["Let's establish a new club.","新しいクラブを設立しよう","establish",4],
+["I want to expand my knowledge.","知識を広げたいです","expand",4],
+["Her speech made a strong impression.","彼女のスピーチは強い印象を残しました","impression",4]
+];
+
 // ---------- セーブデータ ----------
 const LS = 'eitangoQuest_v1';
-function defState(){ return { stars:0, streak:0, lastDay:'', todayDay:'', todayN:0, words:{}, freeLv:[], phr:{} }; }
+function defState(){ return { stars:0, streak:0, lastDay:'', todayDay:'', todayN:0, words:{}, freeLv:[], phr:{}, sent:{} }; }
 let S;
 try { S = Object.assign(defState(), JSON.parse(localStorage.getItem(LS) || '{}')); }
 catch(e){ S = defState(); }
@@ -1195,7 +1413,151 @@ function startSession(mode){
   show('scrQuiz');
   nextQ();
 }
-function retrySession(){ ses.kind ? startSpeak(ses.kind) : startSession(ses.mode); }
+function retrySession(){
+  if(ses.kind === 'cloze' || ses.kind === 'build') startUse(ses.kind);
+  else if(ses.kind) startSpeak(ses.kind);
+  else startSession(ses.mode);
+}
+
+// ---------- つかいかた(例文モード) ----------
+function sstat(id){ return S.sent[id] || (S.sent[id] = { ok:0, ng:0 }); }
+function startUse(kind){
+  ac();
+  const cap = selLevel + 1;
+  const items = [];
+  SENTS.forEach((s, idx) => {
+    if(s[3] > cap) return;
+    const tw = WORDS.find(x => x.en === s[2]);
+    items.push({ id:'s' + idx, en:s[0], ja:s[1], kana: tw ? tw.kana : '', tw, lv:s[3] });
+  });
+  // 「おぼえた単語」を使う例文を最優先 → 未挑戦 → 苦手 → その他。現レベルを優先
+  const score = it => {
+    const p = S.sent[it.id];
+    const grp = !p ? 0 : (p.ng > p.ok ? 1 : 2);
+    const mastered = it.tw && (S.words[it.tw.id]||{lv:0}).lv >= MASTER_LV ? 0 : 1;
+    const cur = it.lv === cap ? 0 : 1;
+    return grp * 4 + mastered * 2 + cur;
+  };
+  const qs = shuffle(items).sort((a, b) => score(a) - score(b)).slice(0, N_Q)
+    .map(w => ({ w, mode: kind }));
+  ses = { qs, i:0, ok:0, wrong:[], combo:0, maxCombo:0, gained:0, mode:kind, kind };
+  show('scrQuiz');
+  nextQ();
+}
+
+function useHeader(w){
+  const m = w.tw && (S.words[w.tw.id]||{lv:0}).lv >= MASTER_LV;
+  return '(Lv' + w.lv + (m ? '・おぼえた単語!' : '') + ')';
+}
+function useCorrect(msg){
+  if(answered) return; answered = true;
+  const w = cur.w;
+  ses.ok++; ses.combo++; ses.maxCombo = Math.max(ses.maxCombo, ses.combo);
+  const gain = 1 + (ses.combo >= 3 ? 1 : 0) + (ses.combo >= 7 ? 1 : 0);
+  ses.gained += gain; S.stars += gain; S.todayN++;
+  sstat(w.id).ok++;
+  if(w.tw) srsOk(w.tw.id); // 使えた単語は習熟ゲージも前進
+  save();
+  sCombo(ses.combo);
+  document.getElementById('starN').textContent = S.stars;
+  const box = document.getElementById('starBox');
+  box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
+  document.getElementById('qMain').textContent = w.en;
+  document.getElementById('fb').textContent = msg + ' +' + gain + '⭐' + (ses.combo >= 2 ? ' 🔥×' + ses.combo : '');
+  speak(w.en);
+  ses.i++; setTimeout(nextQ, 1700);
+}
+function useWrong(){
+  if(answered) return; answered = true;
+  const w = cur.w;
+  ses.combo = 0; ses.wrong.push(w); S.todayN++;
+  sstat(w.id).ng++;
+  save();
+  sBuzz();
+  document.getElementById('qMain').textContent = w.en;
+  document.getElementById('fb').textContent = 'ざんねん…正解は「' + w.en + '」';
+  speak(w.en);
+  ses.i++; setTimeout(nextQ, 2200);
+}
+
+// --- あなうめ ---
+function clozeText(w){
+  if(!w.tw) return w.en;
+  const re = new RegExp('\\b' + w.tw.en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+  return w.en.replace(re, '____');
+}
+function buildClozeChoices(w){
+  const ch = document.getElementById('choices');
+  const dis = w.tw ? distractors(w.tw, 'en') : shuffle(WORDS.slice()).slice(0, 3);
+  const opts = shuffle([w.tw ? w.tw.en : '?', ...dis.map(d => d.en)]);
+  opts.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'choice'; b.textContent = t;
+    b.onclick = () => {
+      if(answered) return;
+      const okBtn = t === (w.tw ? w.tw.en : '');
+      document.querySelectorAll('.choice').forEach(x => {
+        if(x.textContent === w.tw.en) x.classList.add('ok'); else if(x !== b) x.classList.add('dim');
+      });
+      if(okBtn) useCorrect('つかいかたマスター!');
+      else { b.classList.add('ng'); useWrong(); }
+    };
+    ch.appendChild(b);
+  });
+}
+
+// --- えいさくぶん ---
+let buildSt = null;
+function buildTokens(en){ return en.split(' ').map(t => t.replace(/[.,!?]/g, '')).filter(t => t); }
+function startBuildQ(w){
+  const tokens = buildTokens(w.en);
+  buildSt = { tokens, input: [], tries: 0 };
+  document.getElementById('bLine').innerHTML = '';
+  const tiles = document.getElementById('bTiles'); tiles.innerHTML = '';
+  shuffle(tokens.slice()).forEach(tk => {
+    const t = document.createElement('button');
+    t.className = 'bTile'; t.textContent = tk;
+    t.onclick = () => {
+      if(answered || t.classList.contains('used')) return;
+      sTap(); t.classList.add('used');
+      buildSt.input.push({ tk, tile: t });
+      renderBLine();
+      if(buildSt.input.length === buildSt.tokens.length) checkBuild();
+    };
+    tiles.appendChild(t);
+  });
+}
+function renderBLine(){
+  const line = document.getElementById('bLine');
+  line.innerHTML = '';
+  buildSt.input.forEach(x => {
+    const s = document.createElement('span');
+    s.className = 'bWord'; s.textContent = x.tk;
+    line.appendChild(s);
+  });
+}
+function buildBack(){
+  if(answered || !buildSt || !buildSt.input.length) return;
+  buildSt.input.pop().tile.classList.remove('used');
+  renderBLine();
+}
+function checkBuild(){
+  const got = buildSt.input.map(x => x.tk.toLowerCase()).join(' ');
+  const want = buildSt.tokens.map(t => t.toLowerCase()).join(' ');
+  if(got === want){ useCorrect('英作文かんぺき!'); }
+  else {
+    buildSt.tries++;
+    sBuzz();
+    const line = document.getElementById('bLine');
+    line.style.animation = 'shake .4s'; setTimeout(() => line.style.animation = '', 450);
+    if(buildSt.tries >= 2){ useWrong(); }
+    else {
+      document.getElementById('fb').textContent = 'おしい!語順がちがうみたい。⌫でなおしてみよう';
+      buildSt.input.splice(0).forEach(x => x.tile.classList.remove('used'));
+      renderBLine();
+    }
+  }
+}
 
 // ---------- スピーキング ----------
 const SRCls = window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -1358,8 +1720,32 @@ function nextQ(){
   const kana = document.getElementById('qKana');
   ch.innerHTML = ''; ch.style.display = 'grid'; sp.style.display = 'none';
   document.getElementById('speakWrap').style.display = 'none';
+  document.getElementById('buildWrap').style.display = 'none';
   document.getElementById('speakBtn').style.display = 'inline-block';
+  main.style.fontSize = '';
 
+  if(mode === 'cloze'){
+    document.getElementById('qMode').textContent = '🕳️ あなうめクイズ' + useHeader(w);
+    main.style.fontSize = 'clamp(20px,5.5vw,28px)';
+    main.textContent = clozeText(w);
+    kana.textContent = '';
+    sub.textContent = '「' + w.ja + '」 空所に入る単語は?';
+    document.getElementById('speakBtn').style.display = 'none';
+    buildClozeChoices(w);
+    return;
+  }
+  if(mode === 'build'){
+    document.getElementById('qMode').textContent = '🧱 えいさくぶん' + useHeader(w);
+    main.style.fontSize = 'clamp(20px,5.5vw,28px)';
+    main.textContent = w.ja;
+    kana.textContent = '';
+    sub.textContent = '単語をタップして 英語の語順にならべよう';
+    document.getElementById('speakBtn').style.display = 'none';
+    ch.style.display = 'none';
+    document.getElementById('buildWrap').style.display = 'block';
+    startBuildQ(w);
+    return;
+  }
   if(mode === 'speak'){
     document.getElementById('qMode').textContent = ses.kind === 'phrase'
       ? '🗣️ かいわフレーズ(Lv' + w.lv + ')'
