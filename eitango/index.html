@@ -194,7 +194,8 @@
   .wRow { display:flex; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px dashed #ddd; }
   .wRow:last-child { border-bottom:none; }
   .wRow .en { font-weight:bold; font-size:18px; color:#222; min-width:90px; }
-  .wRow .ja { font-size:14px; color:#555; flex:1; }
+  .wRow .ja { font-size:14px; color:#555; flex:1; line-height:1.45; }
+  .wRow .ja b { color:#222; }
   .miniSpk { border:none; background:#e3f2fd; border-radius:50%; width:36px; height:36px; font-size:17px; cursor:pointer; box-shadow:0 2px 0 #90caf9; flex:none; }
   #resBtns { display:flex; gap:10px; }
   #resBtns button {
@@ -1467,7 +1468,7 @@ function useCorrect(msg){
   speak(w.en);
   ses.i++; setTimeout(nextQ, 1700);
 }
-function useWrong(){
+function useWrong(picked){
   if(answered) return; answered = true;
   const w = cur.w;
   ses.combo = 0; ses.wrong.push(w); S.todayN++;
@@ -1475,9 +1476,12 @@ function useWrong(){
   save();
   sBuzz();
   document.getElementById('qMain').textContent = w.en;
-  document.getElementById('fb').textContent = 'ざんねん…正解は「' + w.en + '」';
+  document.getElementById('qKana').textContent = w.tw ? '🗣️ ' + w.tw.kana : '';
+  document.getElementById('fb').innerHTML = w.tw
+    ? 'ざんねん… 正解は ' + wdesc(w.tw) + pickedNote(picked, w.tw.id)
+    : 'ざんねん…正解は「' + w.en + '」';
   speak(w.en);
-  ses.i++; setTimeout(nextQ, 2200);
+  ses.i++; setTimeout(nextQ, picked ? 3000 : 2400);
 }
 
 // --- あなうめ ---
@@ -1489,18 +1493,18 @@ function clozeText(w){
 function buildClozeChoices(w){
   const ch = document.getElementById('choices');
   const dis = w.tw ? distractors(w.tw, 'en') : shuffle(WORDS.slice()).slice(0, 3);
-  const opts = shuffle([w.tw ? w.tw.en : '?', ...dis.map(d => d.en)]);
-  opts.forEach(t => {
+  const opts = shuffle([w.tw, ...dis].filter(o => o));
+  opts.forEach(o => {
     const b = document.createElement('button');
-    b.className = 'choice'; b.textContent = t;
+    b.className = 'choice'; b.textContent = o.en;
     b.onclick = () => {
       if(answered) return;
-      const okBtn = t === (w.tw ? w.tw.en : '');
+      const okBtn = w.tw && o.id === w.tw.id;
       document.querySelectorAll('.choice').forEach(x => {
-        if(x.textContent === w.tw.en) x.classList.add('ok'); else if(x !== b) x.classList.add('dim');
+        if(w.tw && x.textContent === w.tw.en) x.classList.add('ok'); else if(x !== b) x.classList.add('dim');
       });
       if(okBtn) useCorrect('つかいかたマスター!');
-      else { b.classList.add('ng'); useWrong(); }
+      else { b.classList.add('ng'); useWrong(o); }
     };
     ch.appendChild(b);
   });
@@ -1688,9 +1692,9 @@ function speakGiveUp(){
   ses.combo = 0; ses.wrong.push(w); S.todayN++;
   if(ses.kind === 'phrase') pstat(w.id).ng++;
   save();
-  document.getElementById('fb').textContent = 'OK、あとで練習しよう!🔊 ' + w.kana;
+  document.getElementById('fb').textContent = 'OK、あとで練習しよう! ' + w.en + '(' + w.kana + ')=「' + w.ja + '」';
   speak(w.en);
-  ses.i++; setTimeout(nextQ, 1800);
+  ses.i++; setTimeout(nextQ, 2400);
 }
 
 function distractors(w, field){
@@ -1794,12 +1798,20 @@ function buildChoices(dis, field){
     const b = document.createElement('button');
     b.className = 'choice';
     b.textContent = o[field];
-    b.onclick = () => answerChoice(b, o.id === w.id);
+    b.onclick = () => answerChoice(b, o.id === w.id, o);
     ch.appendChild(b);
   });
 }
 
-function answerChoice(btn, correct){
+// 単語の説明「word(ワード)=「意味」」
+function wdesc(w){ return w.en + '(' + w.kana + ')=「' + w.ja + '」'; }
+// えらんでしまった単語の意味を添える(正解と同じなら何も出さない)
+function pickedNote(picked, ansId){
+  if(!picked || picked.id === ansId) return '';
+  return '<br><small style="font-size:14px;opacity:.92;">えらんだのは ' + picked.en + '=「' + picked.ja + '」</small>';
+}
+
+function answerChoice(btn, correct, picked){
   if(answered) return; answered = true;
   const w = cur.w;
   if(cur.mode === 'listen') document.getElementById('qMain').textContent = w.en;
@@ -1810,7 +1822,7 @@ function answerChoice(btn, correct){
     const isAns = b.textContent === (cur.mode === 'jaen' ? w.en : w.ja);
     if(isAns) b.classList.add('ok'); else if(b !== btn) b.classList.add('dim');
   });
-  if(correct) onCorrect(); else { btn.classList.add('ng'); onWrong(); }
+  if(correct) onCorrect(); else { btn.classList.add('ng'); onWrong(picked); }
 }
 
 function onCorrect(){
@@ -1827,14 +1839,14 @@ function onCorrect(){
   if(cur.mode !== 'enja' && cur.mode !== 'spell') speak(w.en);
   ses.i++; setTimeout(nextQ, 1100);
 }
-function onWrong(){
+function onWrong(picked){
   const w = cur.w;
   ses.combo = 0; ses.wrong.push(w); S.todayN++;
   srsNg(w.id); save();
   sBuzz();
-  document.getElementById('fb').textContent = 'ざんねん… ' + w.en + '(' + w.kana + ')=「' + w.ja + '」';
+  document.getElementById('fb').innerHTML = 'ざんねん… ' + wdesc(w) + pickedNote(picked, w.id);
   speak(w.en);
-  ses.i++; setTimeout(nextQ, 2000);
+  ses.i++; setTimeout(nextQ, picked ? 2600 : 2000);
 }
 function replayAudio(){ if(cur) speak(cur.w.en); }
 
@@ -1931,8 +1943,15 @@ function endSession(){
       const spk = document.createElement('button'); spk.className = 'miniSpk'; spk.textContent = '🔊';
       spk.onclick = () => speak(w.en);
       const en = document.createElement('span'); en.className = 'en';
-      en.innerHTML = w.en + '<br><small style="color:#4a6cf7;font-size:11px;">' + w.kana + '</small>';
-      const ja = document.createElement('span'); ja.className = 'ja'; ja.textContent = w.ja;
+      const ja = document.createElement('span'); ja.className = 'ja';
+      if(w.tw){
+        // 例文モード: まちがえた単語とその意味を主役にして、例文もそえる
+        en.innerHTML = w.tw.en + '<br><small style="color:#4a6cf7;font-size:11px;">' + w.tw.kana + '</small>';
+        ja.innerHTML = '<b>' + w.tw.ja + '</b><br><small style="color:#888;font-size:11px;">' + w.en + '<br>' + w.ja + '</small>';
+      } else {
+        en.innerHTML = w.en + '<br><small style="color:#4a6cf7;font-size:11px;">' + w.kana + '</small>';
+        ja.textContent = w.ja;
+      }
       r.append(spk, en, ja); wl.appendChild(r);
     });
   } else {
