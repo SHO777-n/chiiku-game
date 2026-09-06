@@ -82,14 +82,41 @@
 
   /* ===== speaking ===== */
   #speakWrap { text-align:center; }
-  #micBtn {
+  #micBtn, #instMic {
     width:96px; height:96px; border-radius:50%; border:none; font-size:44px; cursor:pointer;
     background:linear-gradient(135deg,#ff5f6d,#ff9966); box-shadow:0 6px 0 #c73e4a; margin-top:4px;
   }
-  #micBtn:active { transform:translateY(3px); box-shadow:0 2px 0 #c73e4a; }
-  #micBtn.on { background:linear-gradient(135deg,#00c853,#69f0ae); box-shadow:0 6px 0 #00913c; animation:micPulse 1s infinite; }
+  #micBtn:active, #instMic:active { transform:translateY(3px); box-shadow:0 2px 0 #c73e4a; }
+  #micBtn.on, #instMic.on { background:linear-gradient(135deg,#00c853,#69f0ae); box-shadow:0 6px 0 #00913c; animation:micPulse 1s infinite; }
   @keyframes micPulse { 50% { transform:scale(1.1); } }
   #micStatus { color:#fff; font-weight:bold; font-size:14px; text-shadow:1px 1px 0 rgba(0,0,0,.3); min-height:22px; margin-top:8px; }
+
+  /* ===== 瞬間英作文 ===== */
+  #instBtn {
+    border:none; border-radius:22px; padding:15px 10px; margin-bottom:10px; cursor:pointer; font-family:inherit; width:100%;
+    background:linear-gradient(135deg,#7b1fa2,#e040fb); color:#fff; font-size:19px; font-weight:bold;
+    box-shadow:0 6px 0 #4a148c; text-shadow:1px 1px 0 rgba(0,0,0,.2);
+  }
+  #instBtn small { display:block; font-size:12px; font-weight:normal; margin-top:3px; }
+  #instBtn:active { transform:translateY(4px); box-shadow:0 2px 0 #4a148c; }
+  #instWrap { text-align:center; }
+  #instTimer {
+    font-size:30px; font-weight:bold; color:#fff; text-shadow:2px 2px 0 rgba(0,0,0,.25);
+    font-variant-numeric:tabular-nums; min-height:38px;
+  }
+  #instTimer.slow { color:#ffe082; }
+  #instStatus { color:#fff; font-weight:bold; font-size:14px; text-shadow:1px 1px 0 rgba(0,0,0,.3); min-height:22px; margin-top:8px; }
+  #instHeard {
+    display:none; background:#fff; border-radius:14px; padding:8px 12px; margin:8px auto 0; max-width:320px;
+    font-size:15px; color:#333; box-shadow:0 3px 0 rgba(0,0,0,.15); word-break:break-word;
+  }
+  #instAns {
+    display:none; background:#fff; border-radius:14px; padding:10px 12px; margin:10px auto 0; max-width:340px;
+    box-shadow:0 3px 0 rgba(0,0,0,.15);
+  }
+  #instAns .ansEn { font-size:19px; font-weight:bold; color:#222; }
+  #instAns .ansKana { font-size:12px; color:#4a6cf7; margin-top:2px; }
+  #instRow { display:flex; gap:10px; justify-content:center; margin-top:12px; flex-wrap:wrap; }
   #heardBox {
     display:none; background:#fff; border-radius:14px; padding:8px 12px; margin:8px auto 0; max-width:320px;
     font-size:15px; color:#333; box-shadow:0 3px 0 rgba(0,0,0,.15); word-break:break-word;
@@ -263,6 +290,8 @@
         <button class="menuCard" style="background:#5c6bc0;" onclick="startUse('cloze')"><span class="em">🕳️</span><span class="nm">あなうめクイズ</span><span class="ds">例文の空所に合う単語を選ぶ</span></button>
         <button class="menuCard" style="background:#8d6e63;" onclick="startUse('build')"><span class="em">🧱</span><span class="nm">えいさくぶん</span><span class="ds">単語をならべて英文をつくる</span></button>
       </div>
+      <div style="text-align:center;color:#fff;font-weight:bold;font-size:13px;text-shadow:1px 1px 0 #2f4dd0;margin:2px 0 4px;">▼ しあげ(会話につなげる!)</div>
+      <button id="instBtn" onclick="startInstant()">⚡🗣️ 瞬間英作文<small>日本語を見て、ヒントなしで即座に英語を口に出す(例文180+フレーズ120)</small></button>
       <div style="text-align:center;color:#fff;font-weight:bold;font-size:13px;text-shadow:1px 1px 0 #2f4dd0;margin:2px 0 4px;">▼ 出題ジャンル</div>
       <div id="catRow"></div>
       <button id="bookBtn" onclick="showBook()">📖 たんご図鑑(おぼえた単語をチェック)</button>
@@ -309,6 +338,18 @@
         <div id="bTiles"></div>
         <div id="bCtrl">
           <button class="sBtn" onclick="buildBack()">⌫ もどす</button>
+        </div>
+      </div>
+      <div id="instWrap" style="display:none;">
+        <div id="instTimer"></div>
+        <button id="instMic" onclick="instMic()">🎤</button>
+        <div id="instStatus"></div>
+        <div id="instHeard"></div>
+        <div id="instAns"></div>
+        <div id="instRow">
+          <button class="sBtn" onclick="instReveal()">👀 答えをみる</button>
+          <button class="sBtn" onclick="instSelfOK()">✅ 言えた!</button>
+          <button class="sBtn" onclick="instSkip()">⏭ つぎへ</button>
         </div>
       </div>
       <div id="fb"></div>
@@ -1256,7 +1297,7 @@ const SENTS = [
 
 // ---------- セーブデータ ----------
 const LS = 'eitangoQuest_v1';
-function defState(){ return { stars:0, streak:0, lastDay:'', todayDay:'', todayN:0, words:{}, freeLv:[], phr:{}, sent:{} }; }
+function defState(){ return { stars:0, streak:0, lastDay:'', todayDay:'', todayN:0, words:{}, freeLv:[], phr:{}, sent:{}, inst:{} }; }
 let S;
 try { S = Object.assign(defState(), JSON.parse(localStorage.getItem(LS) || '{}')); }
 catch(e){ S = defState(); }
@@ -1312,7 +1353,7 @@ function speak(text){
 
 // ---------- 画面切り替え ----------
 function show(id){ document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
-function goHome(){ speechSynthesis && speechSynthesis.cancel(); updateHome(); show('scrHome'); }
+function goHome(){ speechSynthesis && speechSynthesis.cancel(); instStopTimer(); updateHome(); show('scrHome'); }
 
 // ---------- ホーム ----------
 let selLevel = 0;
@@ -1415,9 +1456,163 @@ function startSession(mode){
   nextQ();
 }
 function retrySession(){
-  if(ses.kind === 'cloze' || ses.kind === 'build') startUse(ses.kind);
+  if(ses.kind === 'instant') startInstant();
+  else if(ses.kind === 'cloze' || ses.kind === 'build') startUse(ses.kind);
   else if(ses.kind) startSpeak(ses.kind);
   else startSession(ses.mode);
+}
+
+// ---------- 瞬間英作文(ヒントなしで即座に口に出す) ----------
+function istat(id){ return S.inst[id] || (S.inst[id] = { ok:0, ng:0, best:0 }); }
+function startInstant(){
+  ac();
+  const cap = selLevel + 1;
+  const pool = [];
+  // 例文180 + かいわフレーズ120 を材料にする
+  SENTS.forEach((sn, idx) => {
+    if(sn[3] > cap) return;
+    const tw = WORDS.find(x => x.en === sn[2]);
+    pool.push({ id:'i s' + idx, en:sn[0], ja:sn[1], kana: tw ? tw.kana : '', tw, lv:sn[3], src:'例文' });
+  });
+  PWORDS.forEach(w => {
+    if(w.lv > cap) return;
+    pool.push({ id:'i' + w.id, en:w.en, ja:w.ja, kana:w.kana, pid:w.id, lv:w.lv, src:'フレーズ' });
+  });
+  // 未挑戦 > 苦手 > その他、その中で今のレベルを優先
+  const score = it => {
+    const r = S.inst[it.id];
+    const grp = !r ? 0 : (r.ng > r.ok ? 1 : 2);
+    return grp * 2 + (it.lv === cap ? 0 : 1);
+  };
+  const qs = shuffle(pool).sort((a, b) => score(a) - score(b)).slice(0, N_Q)
+    .map(w => ({ w, mode:'instant' }));
+  ses = { qs, i:0, ok:0, wrong:[], combo:0, maxCombo:0, gained:0, mode:'instant', kind:'instant' };
+  show('scrQuiz');
+  nextQ();
+}
+
+let instT0 = 0, instTimer = null, instTries = 0, instRevealed = false;
+function instStopTimer(){ if(instTimer){ clearInterval(instTimer); instTimer = null; } }
+function instElapsed(){ return instT0 ? (Date.now() - instT0) / 1000 : 0; }
+function instStartQ(){
+  instTries = 0; instRevealed = false;
+  document.getElementById('instHeard').style.display = 'none';
+  document.getElementById('instAns').style.display = 'none';
+  document.getElementById('instMic').style.display = SRCls ? 'inline-block' : 'none';
+  instStatus(SRCls ? '🎤 をおして、日本語を英語にして言おう!'
+                   : 'この端末は音声認識が使えないみたい。声に出してから「言えた!」を押してね');
+  instT0 = Date.now();
+  instStopTimer();
+  const tick = () => {
+    const t = instElapsed();
+    const el = document.getElementById('instTimer');
+    el.textContent = t.toFixed(1) + '秒';
+    el.classList.toggle('slow', t >= 5);
+  };
+  tick();
+  instTimer = setInterval(tick, 100);
+}
+function instStatus(t){ document.getElementById('instStatus').textContent = t; }
+function instSetMic(on){ document.getElementById('instMic').classList.toggle('on', on); }
+
+function instMic(){
+  if(!SRCls || answered) return;
+  if(rec){ try{ rec.abort(); }catch(e){} rec = null; instSetMic(false); instStatus('もう一度🎤を押してね'); return; }
+  try{ speechSynthesis.cancel(); }catch(e){}
+  rec = new SRCls();
+  rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 5;
+  rec.onresult = ev => instHeard(Array.from(ev.results[0]).map(a => a.transcript));
+  rec.onerror = ev => {
+    instSetMic(false); rec = null;
+    instStatus(ev.error === 'not-allowed' ? '❗ マイクの許可が必要だよ(ブラウザの設定を確認してね)'
+                                          : '❗ 聞き取れなかった…もう一度🎤か「答えをみる」');
+  };
+  rec.onend = () => { instSetMic(false); rec = null; };
+  try{ rec.start(); instSetMic(true); instStatus('🎧 聞いてるよ…英語で言ってみて!'); }
+  catch(e){ instSetMic(false); rec = null; }
+}
+function instHeard(alts){
+  if(answered || !cur || cur.mode !== 'instant') return;
+  const hb = document.getElementById('instHeard');
+  hb.style.display = 'block';
+  hb.textContent = '👂 ' + (alts[0] || '…');
+  if(matchSpeech(cur.w.en, alts)) instOK(instElapsed());
+  else {
+    instTries++;
+    sBuzz();
+    instStatus(instTries >= 2 ? '🤔 ちがうみたい。「答えをみる」で確認してもOK!'
+                              : '🤔 うーん、ちがうふうに聞こえたみたい。もう一度🎤!');
+  }
+}
+// 答えを見てから言った場合は half=true(⭐は入るが記録は「できなかった」扱い)
+function instOK(sec, half){
+  if(answered) return; answered = true;
+  instStopTimer();
+  if(rec){ try{ rec.abort(); }catch(e){} rec = null; instSetMic(false); }
+  const w = cur.w;
+  const r = istat(w.id);
+  let msg;
+  if(half){ r.ng++; msg = '答えを見て確認したね!つぎは見ずにいこう'; }
+  else {
+    r.ok++;
+    if(!r.best || sec < r.best) r.best = Math.round(sec * 10) / 10;
+    ses.ok++; ses.combo++; ses.maxCombo = Math.max(ses.maxCombo, ses.combo);
+    msg = (sec <= 3 ? '⚡ 瞬発力バツグン!' : sec <= 6 ? '🎉 言えた!' : '👍 言えた!つぎはもっと早く')
+        + ' ' + sec.toFixed(1) + '秒';
+  }
+  if(!half){
+    const gain = 1 + (ses.combo >= 3 ? 1 : 0) + (ses.combo >= 7 ? 1 : 0) + (sec <= 3 ? 1 : 0);
+    ses.gained += gain; S.stars += gain;
+    msg += ' +' + gain + '⭐' + (ses.combo >= 2 ? ' 🔥×' + ses.combo : '');
+    document.getElementById('starN').textContent = S.stars;
+    const box = document.getElementById('starBox');
+    box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
+    sCombo(ses.combo);
+    if(w.tw) srsOk(w.tw.id);
+    if(w.pid) pstat(w.pid).ok++;
+  } else {
+    ses.combo = 0; ses.wrong.push(w);
+    if(w.pid) pstat(w.pid).ng++;
+  }
+  S.todayN++; save();
+  instShowAnswer();
+  document.getElementById('fb').textContent = msg;
+  speak(w.en);
+  ses.i++; setTimeout(nextQ, half ? 2600 : 2000);
+}
+function instShowAnswer(){
+  const w = cur.w;
+  const box = document.getElementById('instAns');
+  box.style.display = 'block';
+  box.innerHTML = '<div class="ansEn"></div><div class="ansKana"></div>';
+  box.querySelector('.ansEn').textContent = w.en;
+  // フレーズは文全体の読み、例文はキーワードの単語を添える
+  box.querySelector('.ansKana').textContent = w.pid ? '🗣️ ' + w.kana
+    : (w.tw ? 'キーワード: ' + w.tw.en + '(' + w.tw.kana + ')=「' + w.tw.ja + '」' : '');
+}
+function instSelfOK(){ if(cur && cur.mode === 'instant' && !answered) instOK(instElapsed(), instRevealed); }
+function instReveal(){
+  if(!cur || cur.mode !== 'instant' || answered || instRevealed) return;
+  instRevealed = true;
+  instStopTimer();
+  instShowAnswer();
+  speak(cur.w.en);
+  instStatus('声に出して言えたら「言えた!」、つぎにいくなら「つぎへ」');
+}
+function instSkip(){
+  if(!cur || cur.mode !== 'instant' || answered) return;
+  answered = true;
+  instStopTimer();
+  if(rec){ try{ rec.abort(); }catch(e){} rec = null; instSetMic(false); }
+  const w = cur.w;
+  ses.combo = 0; ses.wrong.push(w); S.todayN++;
+  istat(w.id).ng++;
+  if(w.pid) pstat(w.pid).ng++;
+  save();
+  instShowAnswer();
+  document.getElementById('fb').textContent = 'OK、この文はまた出てくるよ!';
+  speak(w.en);
+  ses.i++; setTimeout(nextQ, 2600);
 }
 
 // ---------- つかいかた(例文モード) ----------
@@ -1725,8 +1920,23 @@ function nextQ(){
   ch.innerHTML = ''; ch.style.display = 'grid'; sp.style.display = 'none';
   document.getElementById('speakWrap').style.display = 'none';
   document.getElementById('buildWrap').style.display = 'none';
+  document.getElementById('instWrap').style.display = 'none';
   document.getElementById('speakBtn').style.display = 'inline-block';
   main.style.fontSize = '';
+  instStopTimer();
+
+  if(mode === 'instant'){
+    document.getElementById('qMode').textContent = '⚡🗣️ 瞬間英作文(Lv' + w.lv + '・' + w.src + ')';
+    main.style.fontSize = 'clamp(20px,5.5vw,28px)';
+    main.textContent = w.ja;
+    kana.textContent = '';
+    sub.textContent = 'これを英語で!(ヒントなし・早く言えるほど⭐が多い)';
+    document.getElementById('speakBtn').style.display = 'none';
+    ch.style.display = 'none';
+    document.getElementById('instWrap').style.display = 'block';
+    instStartQ();
+    return;
+  }
 
   if(mode === 'cloze'){
     document.getElementById('qMode').textContent = '🕳️ あなうめクイズ' + useHeader(w);
@@ -1919,6 +2129,7 @@ function checkSpell(){
 
 // ---------- 結果 ----------
 function endSession(){
+  instStopTimer();
   document.getElementById('qBarIn').style.width = '100%';
   // 連続日数
   const today = todayStr();
